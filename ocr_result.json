@@ -1,0 +1,164 @@
+[
+  {
+    "text": "Start",
+    "bbox": [
+      375,
+      60,
+      50,
+      30
+    ],
+    "center": [
+      400,
+      75
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 400,
+      "y": 75
+    }
+  },
+  {
+    "text": "Input Data",
+    "bbox": [
+      350,
+      120,
+      100,
+      30
+    ],
+    "center": [
+      400,
+      135
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 400,
+      "y": 135
+    }
+  },
+  {
+    "text": "Process Data",
+    "bbox": [
+      340,
+      240,
+      120,
+      30
+    ],
+    "center": [
+      400,
+      255
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 400,
+      "y": 255
+    }
+  },
+  {
+    "text": "No",
+    "bbox": [
+      240,
+      270,
+      20,
+      30
+    ],
+    "center": [
+      250,
+      285
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 250,
+      "y": 285
+    }
+  },
+  {
+    "text": "Error Is",
+    "bbox": [
+      160,
+      360,
+      80,
+      30
+    ],
+    "center": [
+      200,
+      375
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 200,
+      "y": 375
+    }
+  },
+  {
+    "text": "Valid?",
+    "bbox": [
+      370,
+      300,
+      60,
+      30
+    ],
+    "center": [
+      400,
+      315
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 400,
+      "y": 315
+    }
+  },
+  {
+    "text": "Yes",
+    "bbox": [
+      480,
+      330,
+      30,
+      30
+    ],
+    "center": [
+      495,
+      345
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 495,
+      "y": 345
+    }
+  },
+  {
+    "text": "Output Result",
+    "bbox": [
+      335,
+      480,
+      130,
+      30
+    ],
+    "center": [
+      400,
+      495
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 400,
+      "y": 495
+    }
+  },
+  {
+    "text": "End",
+    "bbox": [
+      385,
+      540,
+      30,
+      30
+    ],
+    "center": [
+      400,
+      555
+    ],
+    "confidence": 0.8,
+    "position": {
+      "x": 400,
+      "y": 555
+    }
+  }
+]
