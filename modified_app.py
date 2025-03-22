@@ -220,64 +220,34 @@ class RealFlowchartAnalyzer:
         return structured_data
     
     def _associate_text_with_shapes(self, shapes, text_regions):
-        """将文本与图形关联"""
+        """将文本与图形关联 - 按顺序关联，而不是按距离"""
         # 如果没有文本区域，直接返回
         if not text_regions:
             print("警告: 没有检测到任何文本")
             return
             
-        # 创建已分配文本的集合
-        assigned_texts = set()
+        # 按创建顺序依次关联
+        text_index = 0
+        total_texts = len(text_regions)
         
-        for shape in shapes:
-            # 确保shape有center属性
-            if "center" not in shape:
-                if "position" in shape and "x" in shape["position"] and "y" in shape["position"]:
-                    shape["center"] = (shape["position"]["x"], shape["position"]["y"])
-                else:
-                    print(f"警告: 图形缺少center和position属性，跳过")
-                    continue
+        print(f"开始按顺序关联，共有 {len(shapes)} 个图形和 {total_texts} 个文本区域")
+        
+        for i, shape in enumerate(shapes):
+            # 如果文本已用完，则剩余图形不关联文本
+            if text_index >= total_texts:
+                shape["text"] = ""
+                print(f"图形 {i} ({shape['type']}): 文本已用完，不关联")
+                continue
                 
-            shape_center = shape["center"]
-            closest_text = None
-            min_distance = float('inf')
-            closest_text_idx = -1
+            # 获取当前文本区域
+            text_region = text_regions[text_index]
             
-            # 查找最近的文本
-            for i, text_region in enumerate(text_regions):
-                if i in assigned_texts:
-                    continue  # 跳过已分配的文本
-                
-                # 确保text_region有center属性
-                if "center" not in text_region:
-                    if "position" in text_region and "x" in text_region["position"] and "y" in text_region["position"]:
-                        text_region["center"] = (text_region["position"]["x"], text_region["position"]["y"])
-                    elif "bbox" in text_region and len(text_region["bbox"]) == 4:
-                        x, y, w, h = text_region["bbox"]
-                        text_region["center"] = (x + w // 2, y + h // 2)
-                        text_region["position"] = {"x": x + w // 2, "y": y + h // 2}
-                    else:
-                        print(f"警告: 文本区域 {i} 缺少center、position和bbox属性，跳过")
-                        continue
-                    
-                text_center = text_region["center"]
-                
-                # 计算距离
-                distance = self._calculate_distance(shape_center, text_center)
-                
-                if distance < min_distance and distance < self.max_distance:
-                    min_distance = distance
-                    closest_text = text_region
-                    closest_text_idx = i
+            # 关联文本到当前图形
+            shape["text"] = text_region["text"]
+            print(f"图形 {i} ({shape['type']}): 关联文本 '{text_region['text']}'")
             
-            # 关联文本
-            if closest_text:
-                shape["text"] = closest_text["text"]
-                assigned_texts.add(closest_text_idx)
-                # print(f"关联文本: 图形类型 {shape['type']} 与文本 '{closest_text['text']}'")
-            else:
-                shape["text"] = ""  # 没有找到关联文本
-                # print(f"未找到关联文本: 图形类型 {shape['type']}")
+            # 移动到下一个文本区域
+            text_index += 1
     
     def _identify_node_types(self, shapes):
         """识别节点类型"""
@@ -501,8 +471,8 @@ class RealImageProcessor:
             
             # 计算面积比
             area_ratio = area / rect_area if rect_area > 0 else 0
-
-            # 获取最小外接矩形（可能有旋转）
+            
+            # 计算最小外接矩形面积比
             min_rect = cv2.minAreaRect(contour)
             min_rect_width, min_rect_height = min_rect[1]
             min_rect_area = min_rect_width * min_rect_height
@@ -549,23 +519,40 @@ class RealImageProcessor:
             
             shapes.append(shape)
         
+        # 按照y坐标从上到下排序图形
+        shapes.sort(key=lambda shape: shape["position"]["y"])
+        
+        # 重新编号并更新调试图像
+        debug_image = image.copy()  # 重新创建调试图像
+        for i, shape in enumerate(shapes):
+            # 获取边界框
+            x, y, w, h = shape["bbox"]
+            
+            # 重新绘制轮廓和编号
+            contour = np.array(shape["contour"], dtype=np.int32)
+            
+            # 设置颜色
+            color = (0, 255, 0)  # 默认绿色
+            if shape["type"] == "diamond":
+                color = (0, 0, 255)  # 红色
+            elif shape["type"] == "ellipse":
+                color = (255, 0, 0)  # 蓝色
+            elif shape["type"] == "parallelogram":
+                color = (0, 255, 255)  # 黄色
+                
+            cv2.drawContours(debug_image, [contour], 0, color, 2)
+            cv2.putText(debug_image, f"{i}: {shape['type']}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+            # 打印排序后的图形信息
+            print(f"排序后 图形 {i} - 类型: {shape['type']}, 位置: y={shape['position']['y']}")
+        
         # 保存调试图像
         debug_path = os.path.join(app.config['UPLOAD_FOLDER'], f"debug_{uuid.uuid4()}.jpg")
         cv2.imwrite(debug_path, debug_image)
         print(f"调试图像已保存: {debug_path}")
         
         # 打印识别到的图形数量
-        print(f"识别到 {len(shapes)} 个图形")
-        
-        # 4. 检查轮廓的规则性
-        # 计算最小外接矩形的面积
-        rect = cv2.minAreaRect(contour)
-        box = cv2.boxPoints(rect)
-        box_area = cv2.contourArea(np.int0(box))
-        # 计算轮廓面积与最小外接矩形面积的比例
-        area_ratio = area / box_area if box_area > 0 else 0
-        if area_ratio < 0.6:  # 如果轮廓面积远小于最小外接矩形面积，可能不是规则图形
-            return False
+        print(f"识别到 {len(shapes)} 个图形，已按从上到下排序")
         
         return image, shapes
     
@@ -1312,147 +1299,46 @@ class QwenVLOCREngine:
             # 按行分割响应内容
             lines = response_content.split('\n')
             
-            # 将所有文本合并为一个字符串，然后按常见的流程图元素文本进行分割
+            # 将所有文本合并为一个字符串
             all_text = ' '.join([line.strip() for line in lines if line.strip()])
             
-            # 定义常见的流程图元素关键词
-            flowchart_keywords = [
-                
-            ]
-            
-            # 尝试识别文本中的各个元素
-            detected_elements = []
-            
-            # 1. 首先尝试使用空格分割
+            # 直接按空格分割文本
             words = all_text.split()
             
-            # 2. 对于每个单词，检查是否是流程图关键词或者是否可能是一个元素的开始
-            current_element = ""
-            for word in words:
-                word = word.strip()
-                if not word:
+            # 需要过滤的关键词
+            filtered_words = ["是", "否"]
+            
+            # 为每个分割后的词创建一个文本区域
+            for i, word in enumerate(words):
+                if not word.strip():
                     continue
                 
-                # 检查是否是关键词
-                is_keyword = False
-                for keyword in flowchart_keywords:
-                    if keyword.lower() in word.lower():
-                        # 如果当前已经有积累的元素，保存它
-                        if current_element:
-                            detected_elements.append(current_element.strip())
-                        # 开始新元素
-                        current_element = word
-                        is_keyword = True
-                        break
-                
-                # 如果不是关键词，添加到当前元素
-                if not is_keyword:
-                    if current_element:
-                        # 如果当前元素已经很长，可能是新元素
-                        if len(current_element.split()) >= 3:
-                            detected_elements.append(current_element.strip())
-                            current_element = word
-                        else:
-                            current_element += " " + word
-                    else:
-                        current_element = word
-            
-            # 添加最后一个元素
-            if current_element:
-                detected_elements.append(current_element.strip())
-            
-            # 进一步处理检测到的元素，尝试分割复合元素
-            refined_elements = []
-            for element in detected_elements:
-                # 特殊处理 "Error Is Valid?" 这种情况
-                if "error" in element.lower() and "valid" in element.lower():
-                    # 分割成 "Error" 和 "Is Valid?"
-                    parts = element.split("Is", 1)
-                    if len(parts) == 2:
-                        refined_elements.append(parts[0].strip())
-                        refined_elements.append("Is" + parts[1].strip())
-                        continue
-                
-                # 检查是否包含多个关键词
-                contains_multiple_keywords = False
-                for keyword in flowchart_keywords:
-                    if keyword.lower() in element.lower():
-                        # 找到第一个关键词后，检查是否还有其他关键词
-                        remaining = element.lower().replace(keyword.lower(), "", 1)
-                        for other_keyword in flowchart_keywords:
-                            if other_keyword.lower() in remaining:
-                                contains_multiple_keywords = True
-                                break
-                        if contains_multiple_keywords:
-                            break
-                
-                # 如果包含多个关键词，尝试分割
-                if contains_multiple_keywords:
-                    # 尝试按空格分割
-                    parts = element.split()
-                    current_part = ""
-                    for part in parts:
-                        is_keyword = False
-                        for keyword in flowchart_keywords:
-                            if keyword.lower() in part.lower():
-                                # 如果当前已经有积累的部分，保存它
-                                if current_part:
-                                    refined_elements.append(current_part.strip())
-                                # 开始新部分
-                                current_part = part
-                                is_keyword = True
-                                break
-                        
-                        # 如果不是关键词，添加到当前部分
-                        if not is_keyword:
-                            if current_part:
-                                current_part += " " + part
-                            else:
-                                current_part = part
+                # 过滤掉"是"或"否"的文本
+                if word.strip() in filtered_words:
+                    print(f"过滤掉关键词: {word}")
+                    continue
                     
-                    # 添加最后一个部分
-                    if current_part:
-                        refined_elements.append(current_part.strip())
-                else:
-                    # 如果不包含多个关键词，直接添加
-                    refined_elements.append(element)
-            
-            # 如果没有检测到元素，使用原始文本
-            if not refined_elements:
-                refined_elements = [word for word in words if word.strip()]
-            
-            # 如果仍然没有元素，返回整个文本作为一个元素
-            if not refined_elements:
-                refined_elements = [all_text]
-            
-            print(f"检测到以下流程图元素: {refined_elements}")
-            
-            # 为每个检测到的元素创建文本区域
-            for i, element in enumerate(refined_elements):
-                # 根据元素内容估计位置
-                x, y, width, height = self._estimate_element_position(element, i, len(refined_elements), image_width, image_height)
+                # 估算每个文本在图像中的位置
+                position = self._estimate_element_position(word, i, len(words), image_width, image_height)
                 
-                # 计算中心点
-                center_x = x + width // 2
-                center_y = y + height // 2
-                
-                # 创建文本区域
                 text_region = {
-                    "text": element,
-                    "bbox": (x, y, width, height),
-                    "center": (center_x, center_y),
-                    "confidence": 0.8,  # 默认置信度
-                    "position": {"x": center_x, "y": center_y}
+                    "id": f"text_{i}",
+                    "text": word,
+                    "bbox": position,
+                    "position": {
+                        "x": (position[0] + position[2]) // 2,
+                        "y": (position[1] + position[3]) // 2
+                    },
+                    "confidence": 0.9  # 默认置信度
                 }
                 
                 text_regions.append(text_region)
             
-            print(f"从OCR结果中解析出 {len(text_regions)} 个文本区域")
+            return text_regions
             
         except Exception as e:
-            print(f"解析OCR结果时出错: {str(e)}")
-        
-        return text_regions
+            print(f"解析OCR结果失败: {str(e)}")
+            return []
     
     def _estimate_element_position(self, element, index, total_elements, image_width, image_height):
         """根据元素内容估计其在流程图中的位置"""
@@ -1614,7 +1500,7 @@ def visualize_results(image, shapes, text_regions, nodes):
                                 
                         text_center = text_region["center"]
                         # 绘制连接线
-                        cv2.line(vis_image, center, text_center, color, 1, cv2.LINE_AA)
+                        # cv2.line(vis_image, center, text_center, color, 1, cv2.LINE_AA)
                         break
         except Exception as e:
             print(f"处理图形 {i} 时出错: {e}")
