@@ -52,10 +52,77 @@
         }
         .image-container img {
             max-width: 100%;
-            max-height: 500px;
+            max-height: 800px;
             border: 1px solid #ddd;
             border-radius: 5px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        .image-container img:hover {
+            transform: scale(1.02);
+        }
+        .fullscreen-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            overflow: auto;
+            text-align: center;
+            padding: 20px;
+        }
+        .fullscreen-image {
+            max-width: 95%;
+            max-height: 95%;
+            margin: auto;
+            display: block;
+            cursor: zoom-out;
+        }
+        .close-button {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+        }
+        .zoom-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1010;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+        .zoom-button {
+            background: #007bff;
+            border: none;
+            color: white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .detail-item {
+            margin: 10px 0;
+            padding: 10px;
+            border-left: 4px solid #ccc;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .detail-item.valid {
+            border-left-color: #198754;  /* Bootstrap success color */
+        }
+        .detail-item.invalid {
+            border-left-color: #dc3545;  /* Bootstrap danger color */
         }
     </style>
 </head>
@@ -316,9 +383,55 @@
                                 </div>
                             {% endif %}
                         </div>
-                        
-                        <div class="text-center mt-4">
-                            <a href="/" class="btn btn-primary btn-lg">返回首页</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 在原有的结果展示区域后添加验证结果部分 -->
+    <div class="container mt-4">
+        <!-- 将原本隐藏的验证结果显示出来 -->
+        <div class="validation-results">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">规则符合度分析</h5>
+                </div>
+                <div class="card-body">
+                    <div class="score">
+                        <p>匹配度评分：<span id="score" class="badge bg-primary">{{ validation.score if validation is defined and validation.score is defined else 'N/A' }}</span></p>
+                    </div>
+                    <div class="feedback">
+                        <p>总体评价：<span id="feedback" class="text-muted">{{ validation.feedback if validation is defined and validation.feedback is defined else '未进行验证或无法验证' }}</span></p>
+                    </div>
+                    <div class="details">
+                        <h6>详细分析：</h6>
+                        <div id="validationDetails">
+                            {% if validation is defined and validation.details is defined %}
+                                {% for detail in validation.details %}
+                                    <div class="detail-item {{ 'valid' if detail.is_valid else 'invalid' }}">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>图形类型：</strong>{{ detail.shape_type }}</p>
+                                                <p><strong>文本内容：</strong>{{ detail.text }}</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p><strong>判断结果：</strong>
+                                                    <span class="badge {{ 'bg-success' if detail.is_valid else 'bg-danger' }}">
+                                                        {{ '符合规则' if detail.is_valid else '不符合规则' }}
+                                                    </span>
+                                                </p>
+                                                <p><strong>判断理由：</strong>{{ detail.reason }}</p>
+                                                {% if detail.suggestion %}
+                                                    <p><strong>修改建议：</strong>{{ detail.suggestion }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted">无验证数据</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -326,12 +439,91 @@
         </div>
     </div>
 
+    <!-- 添加新的"返回首页"按钮在页脚之前，居中显示 -->
+    <div class="container mt-5 mb-5">
+        <div class="text-center">
+            <a href="/" class="btn btn-primary btn-lg px-5">返回首页</a>
+        </div>
+    </div>
+
     <footer class="bg-light py-4 mt-5">
         <div class="container text-center">
-            <p>© 2023 教学流程图智能批阅系统 | 基于计算机视觉和人工智能技术</p>
+            <p>© 2025 教学流程图智能批阅系统 | 基于计算机视觉和人工智能技术</p>
         </div>
     </footer>
 
+    <!-- 全屏图片显示覆盖层 -->
+    <div id="fullscreen-overlay" class="fullscreen-overlay">
+        <span class="close-button" onclick="closeFullscreen()">&times;</span>
+        <img id="fullscreen-image" class="fullscreen-image" src="" alt="放大图片">
+        <div class="zoom-controls">
+            <button class="zoom-button" onclick="zoomImage(-0.1)">-</button>
+            <button class="zoom-button" onclick="zoomImage(0.1)">+</button>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 当前缩放级别
+        let currentZoom = 1;
+        
+        // 为所有图片添加点击事件
+        document.addEventListener('DOMContentLoaded', function() {
+            const images = document.querySelectorAll('.image-container img');
+            images.forEach(img => {
+                img.addEventListener('click', function() {
+                    showFullscreen(this.src);
+                });
+            });
+        });
+        
+        // 显示全屏图片
+        function showFullscreen(src) {
+            const fullscreenImage = document.getElementById('fullscreen-image');
+            fullscreenImage.src = src;
+            document.getElementById('fullscreen-overlay').style.display = 'block';
+            currentZoom = 1;
+            fullscreenImage.style.transform = `scale(${currentZoom})`;
+            
+            // 阻止滚动
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // 关闭全屏图片
+        function closeFullscreen() {
+            document.getElementById('fullscreen-overlay').style.display = 'none';
+            
+            // 恢复滚动
+            document.body.style.overflow = '';
+        }
+        
+        // 缩放图片
+        function zoomImage(delta) {
+            currentZoom += delta;
+            // 限制缩放范围在0.5到3之间
+            currentZoom = Math.max(0.5, Math.min(3, currentZoom));
+            document.getElementById('fullscreen-image').style.transform = `scale(${currentZoom})`;
+        }
+        
+        // 点击全屏图片外的区域关闭全屏
+        document.getElementById('fullscreen-overlay').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeFullscreen();
+            }
+        });
+        
+        // 键盘事件处理
+        document.addEventListener('keydown', function(e) {
+            if (document.getElementById('fullscreen-overlay').style.display === 'block') {
+                if (e.key === 'Escape') {
+                    closeFullscreen();
+                } else if (e.key === '+' || e.key === '=') {
+                    zoomImage(0.1);
+                } else if (e.key === '-') {
+                    zoomImage(-0.1);
+                }
+            }
+        });
+    </script>
 </body>
 </html> 

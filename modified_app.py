@@ -1,11 +1,16 @@
 import os
-import uuid
-import json
 import base64
-import random
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+import json
+import uuid
+import re
+import time
+import requests
+from typing import List, Dict, Any, Tuple, Optional, Union
+from collections import defaultdict
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from PIL import Image, ImageDraw, ImageFont
 
 # 加载环境变量
 load_dotenv(override=True)
@@ -141,7 +146,6 @@ class MockOCREngine:
             {"text": "学生提交作业", "position": {"x": 300, "y": 300}, "center": (300, 300), "bbox": (280, 280, 40, 40), "confidence": 0.9}
         ]
 
-class MockFlowchartAnalyzer:
     """模拟流程图分析器"""
     def analyze(self, shapes, text_regions):
         print("模拟流程图分析")
@@ -180,24 +184,16 @@ class RealFlowchartAnalyzer:
         self.connection_threshold = 200  # 增加连接判断的距离阈值
     
     def analyze(self, shapes, text_regions):
-        """分析流程图，将图形和文本关联，识别连接关系"""
-        # 打印输入信息
-        print(f"分析流程图: {len(shapes)} 个图形, {len(text_regions)} 个文本区域")
+        """分析流程图，关联图形和文本"""
+        print("开始分析流程图...")
+        print(f"图形数量: {len(shapes)}")
+        print(f"文本区域数量: {len(text_regions)}")
         
-        # 确保shapes和text_regions不为空
-        if not shapes:
-            print("警告: 没有检测到任何图形")
-            return {
-                "nodes": [],
-                "connections": [],
-                "statistics": {"total_nodes": 0, "node_types": {}}
-            }
+        # 1. 将文本关联到图形
+        nodes = self._associate_text_with_shapes(shapes, text_regions)
         
-        # 1. 将文本与图形关联
-        self._associate_text_with_shapes(shapes, text_regions)
-        
-        # 2. 识别图形类型
-        nodes = self._identify_node_types(shapes)
+        # 2. 标识节点类型
+        self._identify_node_types(nodes)
         
         # 3. 识别连接关系
         connections = self._identify_connections(nodes)
@@ -205,26 +201,41 @@ class RealFlowchartAnalyzer:
         # 4. 计算统计信息
         statistics = self._calculate_statistics(nodes)
         
-        # 5. 构建结构化数据
-        structured_data = {
+        # 检查并确保所有节点都有必要的字段
+        for i, node in enumerate(nodes):
+            if 'shape_type' not in node:
+                print(f"警告: 节点 {i+1} 缺少shape_type字段，添加默认值'unknown'")
+                node['shape_type'] = 'unknown'
+            if 'text' not in node:
+                print(f"警告: 节点 {i+1} 缺少text字段，添加默认值''")
+                node['text'] = ''
+        
+        print(f"流程图分析完成，共 {len(nodes)} 个节点")
+        
+        return {
             "nodes": nodes,
             "connections": connections,
             "statistics": statistics
         }
-        
-        # 打印节点统计信息
-        print(f"节点统计: 总计 {statistics['total_nodes']} 个节点")
-        for node_type, count in statistics['node_types'].items():
-            print(f"  - {node_type}: {count} 个")
-        
-        return structured_data
     
     def _associate_text_with_shapes(self, shapes, text_regions):
-        """将文本与图形关联 - 按顺序关联，而不是按距离"""
-        # 如果没有文本区域，直接返回
+        """将文本关联到图形"""
         if not text_regions:
-            print("警告: 没有检测到任何文本")
-            return
+            print("没有文本区域，跳过关联")
+            
+            # 创建没有文本的节点
+            nodes = []
+            for i, shape in enumerate(shapes):
+                node = {
+                    "id": i,
+                    "shape_type": shape["type"],
+                    "text": "",
+                    "position": shape["position"] if "position" in shape else {"x": 0, "y": 0},
+                    "bbox": shape["bbox"] if "bbox" in shape else {"x": 0, "y": 0, "width": 0, "height": 0},
+                }
+                nodes.append(node)
+            
+            return nodes
             
         # 按创建顺序依次关联
         text_index = 0
@@ -232,48 +243,61 @@ class RealFlowchartAnalyzer:
         
         print(f"开始按顺序关联，共有 {len(shapes)} 个图形和 {total_texts} 个文本区域")
         
-        for i, shape in enumerate(shapes):
-            # 如果文本已用完，则剩余图形不关联文本
-            if text_index >= total_texts:
-                shape["text"] = ""
-                print(f"图形 {i} ({shape['type']}): 文本已用完，不关联")
-                continue
-                
-            # 获取当前文本区域
-            text_region = text_regions[text_index]
-            
-            # 关联文本到当前图形
-            shape["text"] = text_region["text"]
-            print(f"图形 {i} ({shape['type']}): 关联文本 '{text_region['text']}'")
-            
-            # 移动到下一个文本区域
-            text_index += 1
-    
-    def _identify_node_types(self, shapes):
-        """识别节点类型"""
+        # 创建节点列表
         nodes = []
         
         for i, shape in enumerate(shapes):
-            # 确保shape包含所有必要的字段
-            if "type" not in shape or "text" not in shape or "position" not in shape or "bbox" not in shape:
-                print(f"警告: 图形 {i} 缺少必要字段，跳过")
-                continue
-                
-            # 根据图形类型确定节点类型
-            node_type = self._map_shape_to_node_type(shape["type"], shape["text"])
+            # 默认文本为空
+            text = ""
+            
+            # 如果还有可用的文本区域，关联文本
+            if text_index < total_texts:
+                # 获取当前文本区域
+                text_region = text_regions[text_index]
+                text = text_region["text"]
+                print(f"图形 {i} ({shape['type']}): 关联文本 '{text}'")
+                # 移动到下一个文本区域
+                text_index += 1
+            else:
+                print(f"图形 {i} ({shape['type']}): 文本已用完，不关联")
             
             # 创建节点
             node = {
                 "id": i,
-                "type": node_type,
-                "text": shape["text"],
-                "position": shape["position"],
-                "bbox": shape["bbox"],
-                "connections": []  # 将在后续步骤中填充
+                "shape_type": shape["type"],
+                "text": text,
+                "position": shape["position"] if "position" in shape else {"x": 0, "y": 0},
+                "bbox": shape["bbox"] if "bbox" in shape else {"x": 0, "y": 0, "width": 0, "height": 0},
             }
             
             nodes.append(node)
-            # print(f"识别节点: ID {i}, 类型 {node_type}, 文本 '{shape['text']}'")
+        
+        return nodes
+    
+    def _identify_node_types(self, nodes):
+        """识别节点类型并更新节点信息"""
+        for i, node in enumerate(nodes):
+            # 确保节点包含所有必要的字段
+            if "shape_type" not in node:
+                print(f"警告: 节点 {i} 缺少shape_type字段，跳过")
+                continue
+                
+            # 确保节点有text字段
+            if "text" not in node:
+                print(f"警告: 节点 {i} 缺少text字段，设为空")
+                node["text"] = ""
+                
+            # 根据图形类型确定节点类型
+            node_type = self._map_shape_to_node_type(node["shape_type"], node["text"])
+            
+            # 更新节点类型
+            node["type"] = node_type
+            
+            # 确保节点有connections字段
+            if "connections" not in node:
+                node["connections"] = []
+                
+            # print(f"标识节点: ID {i}, 类型 {node_type}, 文本 '{node['text']}'")
         
         return nodes
     
@@ -289,14 +313,18 @@ class RealFlowchartAnalyzer:
             else:
                 return "activity"  # 默认为活动
         
-        elif shape_type == "diamond":
-            return "decision"
+        elif shape_type == "菱形":
+            return "决策"
         
-        elif shape_type == "parallelogram":
-            return "input_output"
+        elif shape_type == "平行四边形":
+            return "活动"
         
-        else:  # rectangle or other
-            return "activity"
+        elif shape_type == "矩形":
+            return "活动"
+            
+        else:  # 其他形状
+            print(f"未知图形类型: {shape_type}，默认为活动")
+            return "活动"
     
     def _identify_connections(self, nodes):
         """识别节点之间的连接关系"""
@@ -614,7 +642,7 @@ class RealImageProcessor:
                 
                 # 菱形条件：对角线接近垂直且四边长度接近相等
                 if diag_angle < 0.3 and side_std_ratio < 0.3:
-                    return "diamond", 0.9
+                    return "菱形", 0.9
             
             # 判断是否为平行四边形
             # 平行四边形特征：四个角点，对边平行，对边长度相近，但形状有倾斜
@@ -668,22 +696,22 @@ class RealImageProcessor:
                 
                 # 矩形条件：各角接近90度，面积比高
                 if is_right_angled and min_rect_area_ratio > 0.97:
-                    return "rectangle", 0.95
+                    return "矩形", 0.95
         
         # 检测是否为圆角矩形
         is_rounded_rect = self._is_rounded_rectangle(contour, approx, area)
         if is_rounded_rect and (area_ratio > 0.96 or area_ratio < 0.93):
-            return "rounded_rectangle", 0.9
+            return "圆角矩形", 0.9
         
         # 默认情况，根据面积比判断
         if area_ratio > 0.97:
-            return "rectangle", 0.7
+            return "矩形", 0.7
         elif 0.95 < area_ratio < 0.96:
-            return "parallelogram", 0.7
+            return "平行四边形", 0.7
         elif 0.5 < area_ratio < 0.75:
-            return "diamond", 0.7
+            return "菱形", 0.7
         else:
-            return "unknown", 0.5
+            return "未知", 0.5
     
     def _get_corner_points(self, contour):
         """获取轮廓的角点"""
@@ -1088,7 +1116,7 @@ class RealAIEvaluator:
 - 平行四边形：表示输入/输出（如"学生提交作业"）
 - 菱形框：表示决策或分支（如"是否达标？"）
 - 箭头：表示流程方向
-- 椭圆形：表示起点或终点（如"开始""结束"）
+- 圆角矩形：表示起点或终点（如"开始""结束"）
 - 基本规范：一个矩形、平行四边形、圆角矩形（中间有竖线）三者成模块出现
 
 ## 基本规范
@@ -1117,11 +1145,11 @@ class RealAIEvaluator:
 ```json
 {
   "scores": {
-    "逻辑性": 8,
-    "合理性": 7,
-    "清晰度": 9,
-    "创新性": 6,
-    "总分": 75
+    "逻辑性": 
+    "合理性": 
+    "清晰度": 
+    "创新性": 
+    "总分": 
   },
   "feedback": "详细的反馈意见",
   "符合规范": true,
@@ -1417,6 +1445,35 @@ class QwenVLOCREngine:
         
         return x, y, text_width, text_height
 
+def draw_chinese_text(img, text, position, font_size=20, color=(0, 0, 0), thickness=2):
+    """使用PIL绘制中文文本到OpenCV图像上"""
+    # 将OpenCV图像转换为PIL图像
+    img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    
+    # 创建绘图对象
+    draw = ImageDraw.Draw(img_pil)
+    
+    # 设置字体
+    try:
+        # 尝试使用系统字体
+        font_path = "C:/Windows/Fonts/simhei.ttf"  # Windows系统黑体
+        if not os.path.exists(font_path):
+            # Linux系统字体
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            
+        font = ImageFont.truetype(font_path, font_size)
+    except IOError:
+        # 如果系统字体不可用，使用默认字体
+        font = ImageFont.load_default()
+    
+    # 绘制文本
+    draw.text(position, text, font=font, fill=color)
+    
+    # 将PIL图像转换回OpenCV图像
+    img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+    
+    return img_cv
+
 def visualize_results(image, shapes, text_regions, nodes):
     """将识别结果可视化"""
     # 创建图像副本
@@ -1447,13 +1504,13 @@ def visualize_results(image, shapes, text_regions, nodes):
             x, y, w, h = bbox
             
             # 根据图形类型设置颜色
-            if shape["type"] == "rectangle":
+            if shape["type"] == "矩形":
                 color = (0, 255, 0)  # 绿色
-            elif shape["type"] == "diamond":
+            elif shape["type"] == "菱形":
                 color = (0, 0, 255)  # 红色
-            elif shape["type"] == "ellipse":
+            elif shape["type"] == "圆角矩形":
                 color = (255, 0, 0)  # 蓝色
-            elif shape["type"] == "parallelogram":
+            elif shape["type"] == "平行四边形":
                 color = (0, 255, 255)  # 黄色
             else:
                 color = (128, 128, 128)  # 灰色
@@ -1478,9 +1535,10 @@ def visualize_results(image, shapes, text_regions, nodes):
             center = shape["center"]
             cv2.circle(vis_image, center, 5, color, -1)
             
-            # 绘制图形ID和类型标签
-            label = f"Shape {i}: {shape['type']}"
-            cv2.putText(vis_image, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # 绘制图形ID和类型标签 - 使用中文绘制函数
+            label = f"图形 {i}: {shape['type']}"
+            # 不再使用cv2.putText，改用我们的draw_chinese_text函数
+            vis_image = draw_chinese_text(vis_image, label, (x, y-20), font_size=15, color=color, thickness=2)
             
             # 如果有关联文本，绘制连接线
             if "text" in shape and shape["text"]:
@@ -1579,33 +1637,37 @@ def visualize_results(image, shapes, text_regions, nodes):
         legend_y = 30
         # 矩形
         cv2.rectangle(vis_image, (10, legend_y), (30, legend_y+20), (0, 255, 0), -1)
-        cv2.putText(vis_image, "矩形", (35, legend_y+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        vis_image = draw_chinese_text(vis_image, "矩形", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
+        
         # 菱形
         legend_y += 30
         pts = np.array([[20, legend_y], [30, legend_y+10], [20, legend_y+20], [10, legend_y+10]], np.int32)
         cv2.fillPoly(vis_image, [pts], (0, 0, 255))
-        cv2.putText(vis_image, "菱形", (35, legend_y+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-        # 椭圆
+        vis_image = draw_chinese_text(vis_image, "菱形", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
+        
+        # 圆角矩形
         legend_y += 30
         cv2.ellipse(vis_image, (20, legend_y+10), (10, 10), 0, 0, 360, (255, 0, 0), -1)
-        cv2.putText(vis_image, "椭圆", (35, legend_y+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        vis_image = draw_chinese_text(vis_image, "圆角矩形", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
+        
         # 平行四边形
         legend_y += 30
         pts = np.array([[10, legend_y+20], [25, legend_y+20], [30, legend_y], [15, legend_y]], np.int32)
         cv2.fillPoly(vis_image, [pts], (0, 255, 255))
-        cv2.putText(vis_image, "平行四边形", (35, legend_y+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        vis_image = draw_chinese_text(vis_image, "平行四边形", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
+        
         # 文本
         legend_y += 30
         cv2.rectangle(vis_image, (10, legend_y), (30, legend_y+20), (255, 0, 255), -1)
-        cv2.putText(vis_image, "文本", (35, legend_y+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        vis_image = draw_chinese_text(vis_image, "文本", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
         
         # 添加统计信息
         stats_y = legend_y + 50
-        cv2.putText(vis_image, f"图形数量: {len(shapes)}", (10, stats_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        vis_image = draw_chinese_text(vis_image, f"图形数量: {len(shapes)}", (10, stats_y), font_size=18, color=(0, 0, 0), thickness=2)
         stats_y += 25
-        cv2.putText(vis_image, f"文本数量: {len(text_regions)}", (10, stats_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        vis_image = draw_chinese_text(vis_image, f"文本数量: {len(text_regions)}", (10, stats_y), font_size=18, color=(0, 0, 0), thickness=2)
         stats_y += 25
-        cv2.putText(vis_image, f"节点数量: {len(nodes)}", (10, stats_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        vis_image = draw_chinese_text(vis_image, f"节点数量: {len(nodes)}", (10, stats_y), font_size=18, color=(0, 0, 0), thickness=2)
     except Exception as e:
         print(f"绘制图例时出错: {e}")
     
@@ -1688,6 +1750,55 @@ def upload_file():
                 ai_evaluator = MockAIEvaluator()
                 evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
             
+            # 6. 规则验证
+            try:
+                print("\n============ 开始规则验证 ============")
+                print(f"验证节点数量: {len(structured_data['nodes'])}")
+                
+                # 打印节点信息
+                for i, node in enumerate(structured_data["nodes"]):
+                    print(f"节点 {i+1}:")
+                    print(f"  类型: {node.get('shape_type', 'unknown')}")
+                    print(f"  文本: {node.get('text', 'empty')}")
+                
+                # 优先尝试使用千问API验证
+                api_failed = False
+                try:
+                    validator = QwenValidator(Config.QWEN_API_KEY)
+                    print(f"使用API密钥: {Config.QWEN_API_KEY[:8]}...")
+                    
+                    validation_result = validator.validate_shape_text(structured_data["nodes"])
+                    print(f"千问API验证结果: {validation_result}")
+                    
+                    if validation_result['success']:
+                        validation = validation_result['result']
+                        print("千问API验证成功，获取到结果")
+                    else:
+                        print(f"千问API验证失败: {validation_result['error']}，标记为使用模拟验证器")
+                        api_failed = True
+                except Exception as e:
+                    print(f"千问API验证异常: {str(e)}，标记为使用模拟验证器")
+                    api_failed = True
+                
+                # 如果千问API验证失败，才使用模拟验证器
+                if api_failed:
+                    print("使用模拟验证器作为备用...")
+                    mock_validator = MockValidator()
+                    mock_result = mock_validator.validate_shape_text(structured_data["nodes"])
+                    if mock_result["success"]:
+                        validation = mock_result["result"]
+                        print("模拟验证成功")
+                    else:
+                        validation = None
+                        print(f"模拟验证失败: {mock_result['error']}")
+            except Exception as e:
+                validation = None
+                import traceback
+                print(f"规则验证异常: {str(e)}")
+                print(traceback.format_exc())
+                
+            print("============ 规则验证结束 ============\n")
+            
             # 返回处理结果
             return render_template('result.html', 
                                   image_path=f'uploads/{filename}',
@@ -1695,7 +1806,8 @@ def upload_file():
                                   result=evaluation_result,
                                   shapes=shapes,
                                   text_regions=text_regions,
-                                  nodes=structured_data["nodes"])
+                                  nodes=structured_data["nodes"],
+                                  validation=validation)
         
         except Exception as e:
             flash(f'处理失败: {str(e)}')
@@ -1759,15 +1871,164 @@ def api_analyze():
                 ai_evaluator = MockAIEvaluator()
                 evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
             
+            # 规则验证
+            try:
+                print("\n============ API规则验证 ============")
+                print(f"API验证节点数量: {len(structured_data['nodes'])}")
+                
+                # 优先尝试使用千问API验证
+                api_failed = False
+                try:
+                    validator = QwenValidator(Config.QWEN_API_KEY)
+                    validation_result = validator.validate_shape_text(structured_data["nodes"])
+                    print(f"API千问验证结果: {validation_result}")
+                    
+                    if validation_result['success']:
+                        validation = validation_result['result']
+                        print("API千问验证成功，获取到结果")
+                    else:
+                        print(f"API千问验证失败: {validation_result['error']}，标记为使用模拟验证器")
+                        api_failed = True
+                except Exception as e:
+                    print(f"API千问验证异常: {str(e)}，标记为使用模拟验证器")
+                    api_failed = True
+                
+                # 如果千问API验证失败，使用模拟验证器
+                if api_failed:
+                    print("API使用模拟验证器作为备用...")
+                    mock_validator = MockValidator()
+                    mock_result = mock_validator.validate_shape_text(structured_data["nodes"])
+                    if mock_result["success"]:
+                        validation = mock_result["result"]
+                        print("API模拟验证成功")
+                    else:
+                        validation = None
+                        print(f"API模拟验证失败: {mock_result['error']}")
+            except Exception as e:
+                validation = None
+                import traceback
+                print(f"API规则验证异常: {str(e)}")
+                print(traceback.format_exc())
+                
+            print("============ API规则验证结束 ============\n")
+            
             return jsonify({
                 'image_url': url_for('static', filename=f'uploads/{filename}', _external=True),
-                'result': evaluation_result
+                'result': evaluation_result,
+                'validation': validation
             })
             
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     
     return jsonify({'error': '不支持的文件类型'}), 400
+
+from qwen_validator import QwenValidator
+
+class MockValidator:
+    """模拟验证器，在API不可用时提供基本验证"""
+    
+    def validate_shape_text(self, nodes):
+        print("使用模拟验证器...")
+        if not nodes:
+            return {
+                "success": False,
+                "error": "节点数据为空"
+            }
+            
+        details = []
+        score = 0
+        valid_count = 0
+        
+        for node in nodes:
+            shape_type = node.get('shape_type', 'unknown')
+            text = node.get('text', '')
+            is_valid = False
+            reason = ""
+            suggestion = ""
+            
+            # 基本验证逻辑
+            if shape_type == 'rectangle':
+                # 不再使用预设关键词判断
+                # 默认认为大部分图形符合规则，只在明显不符合时提供建议
+                is_valid = True
+                reason = "矩形一般表示教学活动或步骤，具体判断需由专业人员确认"
+                suggestion = ""
+            elif shape_type == 'parallelogram':
+                is_valid = True
+                reason = "平行四边形一般表示输入/输出，具体判断需由专业人员确认"
+                suggestion = ""
+            elif shape_type == 'diamond':
+                is_valid = True
+                reason = "菱形一般表示决策或分支，具体判断需由专业人员确认"
+                suggestion = ""
+            else:
+                is_valid = False
+                reason = f"未知的图形类型: {shape_type}，需要专业人员判断"
+                suggestion = "建议使用标准图形符号（矩形、菱形、平行四边形等）"
+            
+            details.append({
+                "shape_type": shape_type,
+                "text": text,
+                "is_valid": is_valid,
+                "reason": reason,
+                "suggestion": suggestion if not is_valid else ""
+            })
+            
+            if is_valid:
+                valid_count += 1
+                
+        # 计算总分
+        if nodes:
+            score = int((valid_count / len(nodes)) * 100)
+            
+        # 总体评价
+        if score >= 80:
+            feedback = "流程图符号使用规范，大部分图形与文本匹配良好"
+        elif score >= 60:
+            feedback = "流程图符号使用基本规范，但有一些图形与文本不匹配"
+        else:
+            feedback = "流程图符号使用不规范，大部分图形与文本不匹配"
+            
+        result = {
+            "overall_valid": score >= 60,
+            "score": score,
+            "feedback": feedback,
+            "details": details
+        }
+        
+        return {
+            "success": True,
+            "result": result
+        }
+
+class Config:
+    QWEN_API_KEY = "sk-3444250feb104de5acc16d911a91bb6f"  # 请替换为您的API密钥
+
+@app.route('/api/validate_flowchart', methods=['POST'])
+def validate_flowchart():
+    try:
+        data = request.get_json()
+        if not data or 'nodes' not in data:
+            return jsonify({'error': '未提供图形数据'}), 400
+            
+        nodes = data['nodes']
+        if not nodes:
+            return jsonify({'error': '图形数据为空'}), 400
+            
+        # 使用qwen验证图形和文本
+        validator = QwenValidator(Config.QWEN_API_KEY)
+        validation_result = validator.validate_shape_text(nodes)
+        
+        if not validation_result['success']:
+            return jsonify({'error': validation_result['error']}), 500
+            
+        return jsonify({
+            'validation': validation_result['result']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("教学流程图智能批阅系统启动中...")
