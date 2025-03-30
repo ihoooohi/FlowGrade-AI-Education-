@@ -289,8 +289,8 @@
                             <!-- 各项评分 -->
                             <div class="col-md-3">
                                 <div class="score-card 
-                                    {% if result.scores.逻辑性 >= 8 %}score-high
-                                    {% elif result.scores.逻辑性 >= 6 %}score-medium
+                                    {% if result.scores.逻辑性 >= 20 %}score-high
+                                    {% elif result.scores.逻辑性 >= 15 %}score-medium
                                     {% else %}score-low{% endif %}">
                                     <div class="score-value">{{ result.scores.逻辑性 if result.scores.逻辑性 is defined else 0 }}</div>
                                     <div class="score-label">逻辑性</div>
@@ -298,8 +298,8 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="score-card 
-                                    {% if result.scores.合理性 >= 8 %}score-high
-                                    {% elif result.scores.合理性 >= 6 %}score-medium
+                                    {% if result.scores.合理性 >= 20 %}score-high
+                                    {% elif result.scores.合理性 >= 15 %}score-medium
                                     {% else %}score-low{% endif %}">
                                     <div class="score-value">{{ result.scores.合理性 if result.scores.合理性 is defined else 0 }}</div>
                                     <div class="score-label">合理性</div>
@@ -307,8 +307,8 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="score-card 
-                                    {% if result.scores.清晰度 >= 8 %}score-high
-                                    {% elif result.scores.清晰度 >= 6 %}score-medium
+                                    {% if result.scores.清晰度 >= 20 %}score-high
+                                    {% elif result.scores.清晰度 >= 15 %}score-medium
                                     {% else %}score-low{% endif %}">
                                     <div class="score-value">{{ result.scores.清晰度 if result.scores.清晰度 is defined else 0 }}</div>
                                     <div class="score-label">清晰度</div>
@@ -316,11 +316,46 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="score-card 
-                                    {% if result.scores.创新性 >= 8 %}score-high
-                                    {% elif result.scores.创新性 >= 6 %}score-medium
+                                    {% if result.scores.创新性 >= 20 %}score-high
+                                    {% elif result.scores.创新性 >= 15 %}score-medium
                                     {% else %}score-low{% endif %}">
                                     <div class="score-value">{{ result.scores.创新性 if result.scores.创新性 is defined else 0 }}</div>
                                     <div class="score-label">创新性</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 评分理由 -->
+                        <div class="row mt-4">
+                            <div class="col-md-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5>评分理由</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <h6 class="fw-bold">逻辑性 ({{ result.scores.逻辑性 if result.scores.逻辑性 is defined else 0 }}/25分)</h6>
+                                                    <p>{{ result.评分理由.逻辑性 if result.评分理由 is defined and result.评分理由.逻辑性 is defined else '无评分理由' }}</p>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <h6 class="fw-bold">合理性 ({{ result.scores.合理性 if result.scores.合理性 is defined else 0 }}/25分)</h6>
+                                                    <p>{{ result.评分理由.合理性 if result.评分理由 is defined and result.评分理由.合理性 is defined else '无评分理由' }}</p>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <h6 class="fw-bold">清晰度 ({{ result.scores.清晰度 if result.scores.清晰度 is defined else 0 }}/25分)</h6>
+                                                    <p>{{ result.评分理由.清晰度 if result.评分理由 is defined and result.评分理由.清晰度 is defined else '无评分理由' }}</p>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <h6 class="fw-bold">创新性 ({{ result.scores.创新性 if result.scores.创新性 is defined else 0 }}/25分)</h6>
+                                                    <p>{{ result.评分理由.创新性 if result.评分理由 is defined and result.评分理由.创新性 is defined else '无评分理由' }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

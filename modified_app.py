@@ -1042,8 +1042,11 @@ class RealAIEvaluator:
     def __init__(self):
         # 从环境变量获取API密钥
         self.api_key = os.environ.get("DASHSCOPE_API_KEY")
+        self.openai = None  # 默认设置为None
+        
         if not self.api_key or self.api_key == "your_api_key_here":
-            raise ValueError("未设置有效的DASHSCOPE_API_KEY环境变量")
+            print("警告: 未设置有效的DASHSCOPE_API_KEY环境变量，AI评估将不可用")
+            return
         
         try:
             # 初始化OpenAI客户端（使用百炼API）
@@ -1054,18 +1057,42 @@ class RealAIEvaluator:
             print("OpenAI客户端初始化成功")
         except Exception as e:
             print(f"OpenAI客户端初始化失败: {str(e)}")
-            raise
+            self.openai = None  # 确保在异常情况下也设置为None
     
     def evaluate(self, structured_data, image_path):
         """评估流程图"""
+        # 如果客户端未初始化，返回错误消息
+        if self.openai is None:
+            print("AI客户端未初始化，无法评估流程图")
+            return {
+                "error": "AI客户端未初始化，无法评估流程图",
+                "scores": {
+                    "逻辑性": 0,
+                    "合理性": 0,
+                    "清晰度": 0,
+                    "创新性": 0,
+                    "总分": 0
+                },
+                "评分理由": {
+                    "逻辑性": "AI服务不可用",
+                    "合理性": "AI服务不可用",
+                    "清晰度": "AI服务不可用",
+                    "创新性": "AI服务不可用"
+                },
+                "feedback": "AI服务不可用，请检查API密钥配置或稍后重试。",
+                "statistics": structured_data.get("statistics", {})
+            }
+            
         # 准备评估提示
         prompt = self._prepare_evaluation_prompt(structured_data)
+        print(f"AI评估提示: {prompt[:200]}...")
         
         # 读取图像并转换为base64
         image_base64 = self._encode_image(image_path)
         
         try:
             # 调用AI模型进行评估
+            print("正在调用AI进行评估...")
             response = self.openai.ChatCompletion.create(
                 model="qwen-vl-max",  # 使用qwen-vl模型
                 messages=[
@@ -1085,6 +1112,7 @@ class RealAIEvaluator:
             # 添加统计信息
             evaluation_result["statistics"] = structured_data.get("statistics", {})
             
+            print(f"AI评估完成: {json.dumps(evaluation_result, ensure_ascii=False)[:200]}...")
             return evaluation_result
             
         except Exception as e:
@@ -1098,6 +1126,12 @@ class RealAIEvaluator:
                     "清晰度": 0,
                     "创新性": 0,
                     "总分": 0
+                },
+                "评分理由": {
+                    "逻辑性": f"评估过程出错: {str(e)}",
+                    "合理性": f"评估过程出错: {str(e)}",
+                    "清晰度": f"评估过程出错: {str(e)}",
+                    "创新性": f"评估过程出错: {str(e)}"
                 },
                 "feedback": f"AI评估失败: {str(e)}，请稍后重试。",
                 "statistics": structured_data.get("statistics", {})
@@ -1124,7 +1158,7 @@ class RealAIEvaluator:
 - 时间标注（可选）：在步骤旁标注预计时间分配（如"小组讨论：5分钟"）
 - 流程方向：自上而下，不能交叉连线
 
-## 评价标准
+## 评价标准（每项25分，总分100分）
 - 逻辑性：步骤顺序要符合教学逻辑（如"导入→讲授→练习→总结"）
 - 合理性：能区分教师活动（如"讲解案例"）与学生活动（如"分组实验"）
 - 清晰度：能用简练语言描述活动（如"案例导入"而非"教师使用案例导入新课"）
@@ -1136,23 +1170,30 @@ class RealAIEvaluator:
 ```
 
 请分析图像和结构化数据，并给出以下评估结果：
-1. 对每个评价标准（逻辑性、合理性、清晰度、创新性）的得分（1-10分）
-2. 对流程图的整体评价（1-100分）
-3. 详细的反馈意见，包括优点和改进建议
-4. 是否符合标准符号规则和基本规范
+1. 对每个评价标准（逻辑性、合理性、清晰度、创新性）的得分（每项满分25分）
+2. 对流程图的整体评价（总分100分，即四项得分之和）
+3. 针对每个评价标准提供评分理由
+4. 详细的反馈意见，包括优点和改进建议
+5. 是否符合标准符号规则和基本规范
 
 请以JSON格式返回结果，格式如下：
 ```json
 {
   "scores": {
-    "逻辑性": 
-    "合理性": 
-    "清晰度": 
-    "创新性": 
-    "总分": 
+    "逻辑性": 0-25分,
+    "合理性": 0-25分,
+    "清晰度": 0-25分,
+    "创新性": 0-25分,
+    "总分": 0-100分
+  },
+  "评分理由": {
+    "逻辑性": "具体评分理由",
+    "合理性": "具体评分理由",
+    "清晰度": "具体评分理由",
+    "创新性": "具体评分理由"
   },
   "feedback": "详细的反馈意见",
-  "符合规范": true,
+  "符合规范": true/false,
   "改进建议": ["建议1", "建议2", "建议3"]
 }
 ```"""
@@ -1174,6 +1215,26 @@ class RealAIEvaluator:
             if json_start >= 0 and json_end > json_start:
                 json_str = response_text[json_start:json_end]
                 result = json.loads(json_str)
+                
+                # 确保包含所有必要的字段
+                if "scores" not in result:
+                    result["scores"] = {
+                        "逻辑性": 0,
+                        "合理性": 0,
+                        "清晰度": 0,
+                        "创新性": 0,
+                        "总分": 0
+                    }
+                
+                # 如果没有评分理由，添加一个空的评分理由对象
+                if "评分理由" not in result:
+                    result["评分理由"] = {
+                        "逻辑性": "无评分理由",
+                        "合理性": "无评分理由",
+                        "清晰度": "无评分理由",
+                        "创新性": "无评分理由"
+                    }
+                
                 return result
             
             # 如果没有找到JSON，返回原始文本作为反馈
@@ -1184,6 +1245,12 @@ class RealAIEvaluator:
                     "清晰度": 0,
                     "创新性": 0,
                     "总分": 0
+                },
+                "评分理由": {
+                    "逻辑性": "无评分理由",
+                    "合理性": "无评分理由",
+                    "清晰度": "无评分理由",
+                    "创新性": "无评分理由"
                 },
                 "feedback": response_text,
                 "符合规范": False,
@@ -1199,6 +1266,12 @@ class RealAIEvaluator:
                     "清晰度": 0,
                     "创新性": 0,
                     "总分": 0
+                },
+                "评分理由": {
+                    "逻辑性": "无法解析评分理由",
+                    "合理性": "无法解析评分理由",
+                    "清晰度": "无法解析评分理由",
+                    "创新性": "无法解析评分理由"
                 },
                 "feedback": f"无法解析评估结果: {str(e)}",
                 "符合规范": False,
@@ -1284,6 +1357,8 @@ class QwenVLOCREngine:
                 return []
                 
             response_content = completion.choices[0].message.content
+            # 将响应内容转换为单行段落
+            response_content = response_content.replace('\n', ' ').strip()
             print(f"千问视觉OCR响应: {response_content}")
             
             # 解析OCR结果中的文本区域
@@ -1330,8 +1405,14 @@ class QwenVLOCREngine:
             # 将所有文本合并为一个字符串
             all_text = ' '.join([line.strip() for line in lines if line.strip()])
             
+            # 在处理文本之前，将"|"符号替换为特殊标记，以确保它不会被当作分隔符
+            marked_text = all_text.replace(" | ", "_PIPE_")
+            marked_text = marked_text.replace("| ", "_PIPE_")
+            marked_text = marked_text.replace(" |", "_PIPE_")
+            marked_text = marked_text.replace("|", "_PIPE_")
+            
             # 直接按空格分割文本
-            words = all_text.split()
+            words = marked_text.split()
             
             # 需要过滤的关键词
             filtered_words = ["是", "否"]
@@ -1340,6 +1421,9 @@ class QwenVLOCREngine:
             for i, word in enumerate(words):
                 if not word.strip():
                     continue
+                
+                # 将特殊标记还原回"|"符号
+                word = word.replace("_PIPE_", "|")
                 
                 # 过滤掉"是"或"否"的文本
                 if word.strip() in filtered_words:
@@ -1655,11 +1739,6 @@ def visualize_results(image, shapes, text_regions, nodes):
         pts = np.array([[10, legend_y+20], [25, legend_y+20], [30, legend_y], [15, legend_y]], np.int32)
         cv2.fillPoly(vis_image, [pts], (0, 255, 255))
         vis_image = draw_chinese_text(vis_image, "平行四边形", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
-        
-        # 文本
-        legend_y += 30
-        cv2.rectangle(vis_image, (10, legend_y), (30, legend_y+20), (255, 0, 255), -1)
-        vis_image = draw_chinese_text(vis_image, "文本", (35, legend_y), font_size=15, color=(0, 0, 0), thickness=1)
         
         # 添加统计信息
         stats_y = legend_y + 50
