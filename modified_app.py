@@ -1268,7 +1268,7 @@ class QwenVLOCREngine:
                                     "max_pixels": 1280 * 784
                                 }
                             },
-                            {"type": "text", "text": "Identify all text in this flowchart. For each shape or element in the flowchart, extract the text inside it. List each text element on a separate line with its position."}
+                            {"type": "text", "text": "Identify all text in this flowchart."}
                         ]
                     }
                 ],
