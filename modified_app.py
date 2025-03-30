@@ -1750,7 +1750,11 @@ def upload_file():
                 ai_evaluator = MockAIEvaluator()
                 evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
             
-            # 6. 规则验证
+            # 6. 检查流程图模块组合
+            module_check_result = check_flowchart_modules(structured_data["nodes"], structured_data["connections"])
+            print(f"模块检查结果: {module_check_result['message']}")
+            
+            # 7. 规则验证
             try:
                 print("\n============ 开始规则验证 ============")
                 print(f"验证节点数量: {len(structured_data['nodes'])}")
@@ -1807,7 +1811,8 @@ def upload_file():
                                   shapes=shapes,
                                   text_regions=text_regions,
                                   nodes=structured_data["nodes"],
-                                  validation=validation)
+                                  validation=validation,
+                                  module_check=module_check_result)
         
         except Exception as e:
             flash(f'处理失败: {str(e)}')
@@ -1871,6 +1876,10 @@ def api_analyze():
                 ai_evaluator = MockAIEvaluator()
                 evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
             
+            # 检查流程图模块组合
+            module_check_result = check_flowchart_modules(structured_data["nodes"], structured_data["connections"])
+            print(f"API模块检查结果: {module_check_result['message']}")
+            
             # 规则验证
             try:
                 print("\n============ API规则验证 ============")
@@ -1915,7 +1924,8 @@ def api_analyze():
             return jsonify({
                 'image_url': url_for('static', filename=f'uploads/{filename}', _external=True),
                 'result': evaluation_result,
-                'validation': validation
+                'validation': validation,
+                'module_check': module_check_result
             })
             
         except Exception as e:
@@ -2029,6 +2039,70 @@ def validate_flowchart():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def check_flowchart_modules(nodes, connections):
+    """检查流程图中是否存在'矩形-平行四边形-圆角矩形'模块组合
+    
+    直接通过检查节点列表中图形出现的顺序来判断是否符合模式。
+    
+    Args:
+        nodes: 流程图节点列表
+        connections: 流程图连接关系列表（本函数不使用此参数）
+        
+    Returns:
+        dict: 包含检查结果的字典
+            - has_valid_modules (bool): 是否存在有效的模块组合
+            - modules_count (int): 发现的有效模块组合数量
+            - modules (list): 有效模块的序列位置列表
+            - message (str): 结果消息
+    """
+    print("开始检查流程图模块组合...")
+    
+    # 初始化结果
+    result = {
+        "has_valid_modules": False,
+        "modules_count": 0,
+        "modules": [],
+        "message": ""
+    }
+    
+    # 检查节点数量是否足够
+    if len(nodes) < 3:
+        result["message"] = "流程图节点数量不足，无法形成有效模块"
+        return result
+    
+    # 获取节点的图形类型序列
+    shape_sequence = []
+    for node in nodes:
+        shape_type = node.get("shape_type", "unknown").lower()
+        shape_sequence.append(shape_type)
+        
+    print(f"图形序列: {shape_sequence}")
+    
+    # 查找"矩形-平行四边形-圆角矩形"的模式
+    valid_modules = []
+    
+    for i in range(len(shape_sequence) - 2):
+        # 检查连续三个节点是否符合模式
+        if (shape_sequence[i] == "矩形" and 
+            shape_sequence[i+1] == "平行四边形" and 
+            (shape_sequence[i+2] == "圆角矩形")):
+            
+            # 找到一个有效模块
+            valid_modules.append([i, i+1, i+2])
+            print(f"找到有效模块: 位置 {i}, {i+1}, {i+2}")
+    
+    # 设置结果
+    result["has_valid_modules"] = len(valid_modules) > 0
+    result["modules_count"] = len(valid_modules)
+    result["modules"] = valid_modules
+    
+    if result["has_valid_modules"]:
+        result["message"] = f"流程图符合规范，共找到 {len(valid_modules)} 个'矩形-平行四边形-圆角矩形'模块"
+    else:
+        result["message"] = "流程图不符合规范，未找到'矩形-平行四边形-圆角矩形'模块"
+    
+    return result
 
 if __name__ == '__main__':
     print("教学流程图智能批阅系统启动中...")
