@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}分析历史 - 教学流程图智能批阅系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    .history-item {
+        transition: transform 0.3s;
+    }
+    .history-item:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    .thumbnail {
+        height: 150px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f8f9fa;
+    }
+    .thumbnail img {
+        max-height: 100%;
+        max-width: 100%;
+        object-fit: contain;
+    }
+    .history-date {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    .score-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 45px;
+        height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-weight: bold;
+        font-size: 1.2rem;
+        color: white;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .empty-history {
+        padding: 80px 0;
+        text-align: center;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .filters {
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3>分析历史</h3>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#filters">
+                        <i class="bi bi-funnel"></i> 筛选
+                    </button>
+                    {% if records and records|length > 0 %}
+                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#clearHistoryModal">
+                        <i class="bi bi-trash"></i> 清空历史
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="collapse" id="filters">
+                <div class="filters">
+                    <form action="/history" method="get">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-2">
+                                    <label for="start_date" class="form-label">日期范围</label>
+                                    <div class="input-group">
+                                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+                                        <span class="input-group-text">至</span>
+                                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-2">
+                                    <label for="min_score" class="form-label">分数范围</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="min_score" name="min_score" min="0" max="100" placeholder="最低" value="{{ min_score }}">
+                                        <span class="input-group-text">-</span>
+                                        <input type="number" class="form-control" id="max_score" name="max_score" min="0" max="100" placeholder="最高" value="{{ max_score }}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-2">
+                                    <label for="sort_by" class="form-label">排序方式</label>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <select class="form-select" id="sort_by" name="sort_by">
+                                                <option value="date" {% if sort_by == 'date' %}selected{% endif %}>日期</option>
+                                                <option value="score" {% if sort_by == 'score' %}selected{% endif %}>分数</option>
+                                                <option value="filename" {% if sort_by == 'filename' %}selected{% endif %}>文件名</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <select class="form-select" id="sort_order" name="sort_order">
+                                                <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>降序</option>
+                                                <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>升序</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <div class="mb-2 w-100">
+                                    <button type="submit" class="btn btn-primary w-100">应用筛选</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card-body">
+                {% if records and records|length > 0 %}
+                <div class="row row-cols-1 row-cols-md-3 g-4">
+                    {% for record in records %}
+                    <div class="col">
+                        <div class="card h-100 history-item">
+                            {% set score_class = 'bg-success' if record.score >= 80 else 'bg-warning' if record.score >= 60 else 'bg-danger' %}
+                            <div class="score-badge {{ score_class }}">{{ record.score }}</div>
+                            <div class="thumbnail">
+                                <img src="{{ url_for('static', filename=record.image_path) }}" alt="流程图缩略图" class="img-fluid">
+                            </div>
+                            <div class="card-body">
+                                <h5 class="card-title">{{ record.filename }}</h5>
+                                <p class="card-text text-truncate">{{ record.comment }}</p>
+                                <p class="history-date"><i class="bi bi-calendar3"></i> {{ record.date }}</p>
+                            </div>
+                            <div class="card-footer">
+                                <a href="{{ url_for('view_result', session_id=record.id) }}" class="btn btn-primary btn-sm">查看详情</a>
+                                <a href="{{ url_for('download_report', session_id=record.id) }}" class="btn btn-outline-secondary btn-sm">下载报告</a>
+                                <button class="btn btn-outline-danger btn-sm float-end" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#deleteModal" 
+                                        data-record-id="{{ record.id }}"
+                                        data-record-name="{{ record.filename }}">
+                                    <i class="bi bi-trash"></i>
+                                删除</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('history', page=pagination.prev_num, start_date=start_date, end_date=end_date, min_score=min_score, max_score=max_score, sort_by=sort_by, sort_order=sort_order) }}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link" aria-hidden="true">&laquo;</span>
+                        </li>
+                        {% endif %}
+                        
+                        {% for page_num in pagination.pages %}
+                            {% if page_num %}
+                                {% if page_num == pagination.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('history', page=page_num, start_date=start_date, end_date=end_date, min_score=min_score, max_score=max_score, sort_by=sort_by, sort_order=sort_order) }}">{{ page_num }}</a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('history', page=pagination.next_num, start_date=start_date, end_date=end_date, min_score=min_score, max_score=max_score, sort_by=sort_by, sort_order=sort_order) }}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link" aria-hidden="true">&raquo;</span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% else %}
+                <div class="empty-history">
+                    <div class="mb-4">
+                        <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                    </div>
+                    <h4>没有分析历史记录</h4>
+                    <p class="text-muted">上传并分析您的第一个流程图，记录将显示在这里</p>
+                    <a href="/" class="btn btn-primary mt-3">上传流程图</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                您确定要删除 <span id="recordName" class="fw-bold"></span> 的分析记录吗？此操作无法撤销。
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form id="deleteForm" action="/delete_record" method="post">
+                    <input type="hidden" id="recordId" name="record_id" value="">
+                    <button type="submit" class="btn btn-danger">删除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 清空历史确认模态框 -->
+<div class="modal fade" id="clearHistoryModal" tabindex="-1" aria-labelledby="clearHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="clearHistoryModalLabel">确认清空历史</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 警告！
+                </div>
+                <p>您确定要清空所有分析历史记录吗？此操作将删除所有分析结果和相关文件，且<strong>无法撤销</strong>。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form action="/clear_history" method="post">
+                    <button type="submit" class="btn btn-danger">清空所有历史</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 处理删除模态框的逻辑
+        const deleteModal = document.getElementById('deleteModal');
+        if (deleteModal) {
+            deleteModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                const recordId = button.getAttribute('data-record-id');
+                const recordName = button.getAttribute('data-record-name');
+                
+                document.getElementById('recordId').value = recordId;
+                document.getElementById('recordName').textContent = recordName;
+            });
+        }
+    });
+</script>
+{% endblock %} 

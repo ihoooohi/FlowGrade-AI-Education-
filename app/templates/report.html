@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教学流程图分析报告 - {{ record.filename }}</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f5f5f5;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        .header p {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .report-image {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .report-image img {
+            max-width: 100%;
+            max-height: 600px;
+            border: 1px solid #ddd;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            color: #2980b9;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .score-card {
+            display: inline-block;
+            width: 22%;
+            text-align: center;
+            padding: 15px 10px;
+            margin: 10px 1%;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .score-value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        .score-label {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        .score-high {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .score-medium {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .score-low {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .suggestions-list {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .suggestions-list li {
+            margin-bottom: 10px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 50px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+        }
+        .badge-success {
+            background-color: #28a745;
+        }
+        .badge-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .badge-danger {
+            background-color: #dc3545;
+        }
+        .badge-info {
+            background-color: #17a2b8;
+        }
+        .badge-primary {
+            background-color: #007bff;
+        }
+        .badge-secondary {
+            background-color: #6c757d;
+        }
+        .detail-item {
+            border-left: 4px solid #ccc;
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .detail-item.valid {
+            border-left-color: #28a745;
+        }
+        .detail-item.invalid {
+            border-left-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>教学流程图分析报告</h1>
+            <p>文件名：{{ record.filename }} | 分析日期：{{ record.date }}</p>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">流程图</h2>
+            <div class="report-image">
+                <img src="{{ url_for('static', filename=record.image_path, _external=True) }}" alt="教学流程图">
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">评分结果</h2>
+            <div style="text-align: center;">
+                <div class="score-card score-{% if result.scores.总分 >= 80 %}high{% elif result.scores.总分 >= 60 %}medium{% else %}low{% endif %}">
+                    <div class="score-value">{{ result.scores.总分 if result.scores.总分 is defined else 0 }}</div>
+                    <div class="score-label">总分</div>
+                </div>
+                <div class="score-card score-{% if result.scores.逻辑性 >= 20 %}high{% elif result.scores.逻辑性 >= 15 %}medium{% else %}low{% endif %}">
+                    <div class="score-value">{{ result.scores.逻辑性 if result.scores.逻辑性 is defined else 0 }}</div>
+                    <div class="score-label">逻辑性</div>
+                </div>
+                <div class="score-card score-{% if result.scores.合理性 >= 20 %}high{% elif result.scores.合理性 >= 15 %}medium{% else %}low{% endif %}">
+                    <div class="score-value">{{ result.scores.合理性 if result.scores.合理性 is defined else 0 }}</div>
+                    <div class="score-label">合理性</div>
+                </div>
+                <div class="score-card score-{% if result.scores.清晰度 >= 20 %}high{% elif result.scores.清晰度 >= 15 %}medium{% else %}low{% endif %}">
+                    <div class="score-value">{{ result.scores.清晰度 if result.scores.清晰度 is defined else 0 }}</div>
+                    <div class="score-label">清晰度</div>
+                </div>
+                <div class="score-card score-{% if result.scores.创新性 >= 20 %}high{% elif result.scores.创新性 >= 15 %}medium{% else %}low{% endif %}">
+                    <div class="score-value">{{ result.scores.创新性 if result.scores.创新性 is defined else 0 }}</div>
+                    <div class="score-label">创新性</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">评分理由</h2>
+            <div>
+                {% if result.评分理由 is defined %}
+                    <div class="detail-item">
+                        <h3>逻辑性：</h3>
+                        <p>{{ result.评分理由.逻辑性 }}</p>
+                    </div>
+                    <div class="detail-item">
+                        <h3>合理性：</h3>
+                        <p>{{ result.评分理由.合理性 }}</p>
+                    </div>
+                    <div class="detail-item">
+                        <h3>清晰度：</h3>
+                        <p>{{ result.评分理由.清晰度 }}</p>
+                    </div>
+                    <div class="detail-item">
+                        <h3>创新性：</h3>
+                        <p>{{ result.评分理由.创新性 }}</p>
+                    </div>
+                {% else %}
+                    <p>无详细评分理由</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">总体评价</h2>
+            <div class="detail-item">
+                <p>{{ result.feedback if result.feedback is defined else '无总体评价' }}</p>
+            </div>
+        </div>
+        
+        {% if result.改进建议 is defined and result.改进建议|length > 0 %}
+        <div class="section">
+            <h2 class="section-title">改进建议</h2>
+            <ul class="suggestions-list">
+                {% for suggestion in result.改进建议 %}
+                    <li>{{ suggestion }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        <div class="section">
+            <h2 class="section-title">流程图统计信息</h2>
+            <table>
+                <tr>
+                    <th>总节点数</th>
+                    <td>{{ result.statistics.total_nodes if result.statistics and result.statistics.total_nodes is defined else 0 }}</td>
+                </tr>
+                <tr>
+                    <th>符合规范</th>
+                    <td>
+                        {% if result.符合规范 is defined and result.符合规范 %}
+                            <span class="badge badge-success">是</span>
+                        {% else %}
+                            <span class="badge badge-danger">否</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>节点类型统计</th>
+                    <td>
+                        <ul>
+                            {% if result.statistics and result.statistics.node_types is defined %}
+                                {% for type, count in result.statistics.node_types.items() %}
+                                    <li>{{ type }}: {{ count }}</li>
+                                {% endfor %}
+                            {% else %}
+                                <li>无数据</li>
+                            {% endif %}
+                        </ul>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        
+        {% if result.validation is defined %}
+        <div class="section">
+            <h2 class="section-title">规则符合度分析</h2>
+            <p><strong>匹配度评分：</strong> <span class="badge badge-primary">{{ result.validation.score }}</span></p>
+            <p><strong>总体评价：</strong> {{ result.validation.feedback }}</p>
+            
+            {% if result.validation.details is defined and result.validation.details|length > 0 %}
+                <h3>详细分析：</h3>
+                {% for detail in result.validation.details %}
+                    <div class="detail-item {{ 'valid' if detail.is_valid else 'invalid' }}">
+                        <p><strong>图形类型：</strong> {{ detail.shape_type }}</p>
+                        <p><strong>文本内容：</strong> {{ detail.text }}</p>
+                        <p><strong>判断结果：</strong> 
+                            <span class="badge badge-{{ 'success' if detail.is_valid else 'danger' }}">
+                                {{ '符合规则' if detail.is_valid else '不符合规则' }}
+                            </span>
+                        </p>
+                        <p><strong>判断理由：</strong> {{ detail.reason }}</p>
+                        {% if detail.suggestion %}
+                            <p><strong>修改建议：</strong> {{ detail.suggestion }}</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if result.module_check is defined and result.module_check.modules is defined %}
+        <div class="section">
+            <h2 class="section-title">流程图模块组合检查</h2>
+            <div class="detail-item">
+                <p>{{ result.module_check.message }}</p>
+            </div>
+            
+            {% if result.module_check.has_valid_modules %}
+                <h3>发现的有效模块 ({{ result.module_check.modules_count }}):</h3>
+                {% for module in result.module_check.modules %}
+                    <div class="detail-item valid">
+                        <h4>模块 {{ loop.index }}</h4>
+                        <p>位置：#{{ module[0] }} → #{{ module[1] }} → #{{ module[2] }}</p>
+                        <table>
+                            <tr>
+                                <th>图形类型</th>
+                                <th>文本内容</th>
+                            </tr>
+                            <tr>
+                                <td>矩形 ({{ result.nodes[module[0]].shape_type }})</td>
+                                <td>{{ result.nodes[module[0]].text }}</td>
+                            </tr>
+                            <tr>
+                                <td>平行四边形 ({{ result.nodes[module[1]].shape_type }})</td>
+                                <td>{{ result.nodes[module[1]].text }}</td>
+                            </tr>
+                            <tr>
+                                <td>圆角矩形 ({{ result.nodes[module[2]].shape_type }})</td>
+                                <td>{{ result.nodes[module[2]].text }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="footer">
+            <p>教学流程图智能批阅系统 | 报告生成时间：{{ now }}</p>
+        </div>
+    </div>
+</body>
+</html> 

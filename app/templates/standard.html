@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}评价标准 - 教学流程图智能批阅系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>教学流程图评价标准</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <h4>基本评分标准</h4>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>评价维度</th>
+                                            <th>分值</th>
+                                            <th>说明</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>逻辑性</strong></td>
+                                            <td>25分</td>
+                                            <td>流程图的步骤顺序是否符合教学逻辑，各环节是否衔接合理</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>合理性</strong></td>
+                                            <td>25分</td>
+                                            <td>能否清晰区分教师活动与学生活动，活动安排是否符合教学实际</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>清晰度</strong></td>
+                                            <td>25分</td>
+                                            <td>是否使用简练语言描述活动，表达是否清晰准确</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>创新性</strong></td>
+                                            <td>25分</td>
+                                            <td>是否融入非传统技术或教学模式，表现创新教学理念</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header bg-success text-white">
+                                <h4>等级划分</h4>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>总分范围</th>
+                                            <th>等级</th>
+                                            <th>说明</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="table-success">
+                                            <td>90-100分</td>
+                                            <td>优秀</td>
+                                            <td>流程图设计规范完整，逻辑清晰，具有创新性</td>
+                                        </tr>
+                                        <tr class="table-primary">
+                                            <td>80-89分</td>
+                                            <td>良好</td>
+                                            <td>流程图设计基本规范，逻辑较清晰，有一定创新</td>
+                                        </tr>
+                                        <tr class="table-warning">
+                                            <td>70-79分</td>
+                                            <td>中等</td>
+                                            <td>流程图结构完整，但逻辑或表达存在一定问题</td>
+                                        </tr>
+                                        <tr class="table-danger">
+                                            <td>60-69分</td>
+                                            <td>及格</td>
+                                            <td>流程图结构基本完整，但存在明显不足</td>
+                                        </tr>
+                                        <tr class="table-secondary">
+                                            <td>0-59分</td>
+                                            <td>不及格</td>
+                                            <td>流程图存在严重问题，不符合基本规范</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h4>标准符号及用法</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>名称</th>
+                                            <th>用途</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>矩形</td>
+                                            <td>表示教学活动或步骤</td>
+                                        </tr>
+                                        <tr>
+                                            <td>菱形</td>
+                                            <td>表示决策或分支</td>
+                                        </tr>
+                                        <tr>
+                                            <td>平行四边形</td>
+                                            <td>表示输入/输出</td>
+                                        </tr>
+                                        <tr>
+                                            <td>圆角矩形</td>
+                                            <td>表示起点或终点</td>
+                                        </tr>
+                                        <tr>
+                                            <td>箭头</td>
+                                            <td>表示流程方向</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card mb-3">
+                                    <div class="card-header">模块化组合规范</div>
+                                    <div class="card-body">
+                                        <p>一个标准的教学流程图模块通常由以下三个元素组成：</p>
+                                        <ol>
+                                            <li><strong>矩形</strong> - 表示具体的教学活动</li>
+                                            <li><strong>平行四边形</strong> - 表示该活动的输入或输出</li>
+                                            <li><strong>圆角矩形</strong> - 表示执行活动的媒介或功能</li>
+                                        </ol>
+                                        <p>这三个元素应当以连贯的方式出现，确保教学流程的完整性。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <h4>流程图设计指南</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>设计原则</h5>
+                                <ul>
+                                    <li>自上而下，从左到右的流程方向</li>
+                                    <li>避免线条交叉，保持整洁</li>
+                                    <li>教师活动和学生活动应当明确区分</li>
+                                    <li>每个环节描述应当简洁明了</li>
+                                    <li>决策点应当有明确的条件和分支</li>
+                                    <li>流程应当有清晰的开始和结束</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>常见问题</h5>
+                                <ul>
+                                    <li>缺少开始/结束标识</li>
+                                    <li>活动描述过于笼统</li>
+                                    <li>缺少决策分支的条件说明</li>
+                                    <li>教师活动和学生活动混淆</li>
+                                    <li>流程连接不合理</li>
+                                    <li>时间安排不合理</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

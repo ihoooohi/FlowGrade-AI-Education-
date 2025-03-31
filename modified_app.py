@@ -5,6 +5,8 @@ import uuid
 import re
 import time
 import requests
+import pymysql
+import datetime
 from typing import List, Dict, Any, Tuple, Optional, Union
 from collections import defaultdict
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify
@@ -1883,7 +1885,44 @@ def upload_file():
             print("============ 规则验证结束 ============\n")
             
             # 返回处理结果
+            
+            # 保存分析结果到数据库
+            try:
+                # 生成唯一会话ID作为记录ID
+                session_id = str(uuid.uuid4())
+                
+                # 准备数据
+                score = evaluation_result.get('scores', {}).get('总分', 0)
+                comment = evaluation_result.get('feedback', '')
+                current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                
+                # 将结果JSON转换为字符串
+                result_json = json.dumps(evaluation_result, ensure_ascii=False)
+                
+                # 连接数据库
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # 插入记录
+                cursor.execute(
+                    """
+                    INSERT INTO analysis_history (id, filename, image_path, result_json, date, score, comment)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (session_id, file.filename, f'uploads/{filename}', result_json, current_date, score, comment)
+                )
+                
+                # 提交事务
+                conn.commit()
+                conn.close()
+                
+                print(f"已将分析结果保存到数据库，会话ID: {session_id}")
+            except Exception as e:
+                print(f"保存分析结果到数据库失败: {str(e)}")
+                # 这里我们不会因为数据库保存失败而中断用户体验
+            
             return render_template('result.html', 
+                                  session_id=session_id,  # 添加会话ID
                                   image_path=f'uploads/{filename}',
                                   vis_image_path=f'uploads/{vis_filename}' if vis_filename else None,
                                   result=evaluation_result,
@@ -1962,49 +2001,78 @@ def api_analyze():
             # 规则验证
             try:
                 print("\n============ API规则验证 ============")
-                print(f"API验证节点数量: {len(structured_data['nodes'])}")
+                print(f"验证节点数量: {len(structured_data['nodes'])}")
                 
                 # 优先尝试使用千问API验证
                 api_failed = False
                 try:
                     validator = QwenValidator(Config.QWEN_API_KEY)
                     validation_result = validator.validate_shape_text(structured_data["nodes"])
-                    print(f"API千问验证结果: {validation_result}")
                     
                     if validation_result['success']:
                         validation = validation_result['result']
-                        print("API千问验证成功，获取到结果")
                     else:
-                        print(f"API千问验证失败: {validation_result['error']}，标记为使用模拟验证器")
                         api_failed = True
                 except Exception as e:
-                    print(f"API千问验证异常: {str(e)}，标记为使用模拟验证器")
+                    print(f"千问API验证异常: {str(e)}")
                     api_failed = True
                 
                 # 如果千问API验证失败，使用模拟验证器
                 if api_failed:
-                    print("API使用模拟验证器作为备用...")
                     mock_validator = MockValidator()
                     mock_result = mock_validator.validate_shape_text(structured_data["nodes"])
                     if mock_result["success"]:
                         validation = mock_result["result"]
-                        print("API模拟验证成功")
                     else:
                         validation = None
-                        print(f"API模拟验证失败: {mock_result['error']}")
             except Exception as e:
                 validation = None
-                import traceback
                 print(f"API规则验证异常: {str(e)}")
-                print(traceback.format_exc())
-                
-            print("============ API规则验证结束 ============\n")
             
+            # 整合所有结果
+            evaluation_result['validation'] = validation
+            evaluation_result['module_check'] = module_check_result
+            
+            # 保存分析结果到数据库
+            try:
+                # 生成唯一会话ID作为记录ID
+                session_id = str(uuid.uuid4())
+                
+                # 准备数据
+                score = evaluation_result.get('scores', {}).get('总分', 0)
+                comment = evaluation_result.get('feedback', '')
+                current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                
+                # 将结果JSON转换为字符串
+                result_json = json.dumps(evaluation_result, ensure_ascii=False)
+                
+                # 连接数据库
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # 插入记录
+                cursor.execute(
+                    """
+                    INSERT INTO analysis_history (id, filename, image_path, result_json, date, score, comment)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (session_id, file.filename, f'uploads/{filename}', result_json, current_date, score, comment)
+                )
+                
+                # 提交事务
+                conn.commit()
+                conn.close()
+                
+                print(f"API已将分析结果保存到数据库，会话ID: {session_id}")
+                # 添加会话ID到响应中
+                evaluation_result['session_id'] = session_id
+            except Exception as e:
+                print(f"API保存分析结果到数据库失败: {str(e)}")
+            
+            # 返回JSON响应
             return jsonify({
-                'image_url': url_for('static', filename=f'uploads/{filename}', _external=True),
-                'result': evaluation_result,
-                'validation': validation,
-                'module_check': module_check_result
+                'success': True,
+                'result': evaluation_result
             })
             
         except Exception as e:
@@ -2182,6 +2250,345 @@ def check_flowchart_modules(nodes, connections):
         result["message"] = "流程图不符合规范，未找到'矩形-平行四边形-圆角矩形'模块"
     
     return result
+
+# 添加MySQL数据库连接配置
+def get_db_connection():
+    """获取MySQL数据库连接"""
+    config = {
+        'host': 'localhost',
+        'user': 'root',
+        'password': '123456',
+        'db': 'flowchat_db',
+        'charset': 'utf8mb4',
+        'cursorclass': pymysql.cursors.DictCursor
+    }
+    try:
+        conn = pymysql.connect(**config)
+        return conn
+    except Exception as e:
+        print(f"数据库连接错误: {e}")
+        raise
+
+# 查看结果路由
+@app.route('/view_result/<session_id>')
+def view_result(session_id):
+    try:
+        # 从数据库中获取对应的记录
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 查询数据库
+        cursor.execute("SELECT * FROM analysis_history WHERE id = %s", (session_id,))
+        record = cursor.fetchone()
+        
+        if not record:
+            flash('找不到指定的分析记录', 'error')
+            return redirect(url_for('history'))
+        
+        # 解析JSON数据
+        result = json.loads(record['result_json'])
+        
+        # 显示结果页面
+        return render_template(
+            'result.html',
+            session_id=session_id,
+            shapes=result.get('shapes', []),
+            text_regions=result.get('text_regions', []),
+            nodes=result.get('nodes', []),
+            image_path=record['image_path'],
+            vis_image_path=result.get('vis_image_path'),
+            result=result,
+            validation=result.get('validation', {}),
+            module_check=result.get('module_check', {'has_valid_modules': False, 'modules': []})
+        )
+    except Exception as e:
+        flash(f'查看结果时发生错误: {str(e)}', 'error')
+        return redirect(url_for('index'))
+    finally:
+        if conn:
+            conn.close()
+
+# 下载报告路由
+@app.route('/download-report/<session_id>')
+def download_report(session_id):
+    try:
+        # 从数据库中获取对应的记录
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 查询数据库
+        cursor.execute("SELECT * FROM analysis_history WHERE id = %s", (session_id,))
+        record = cursor.fetchone()
+        
+        if not record:
+            flash('找不到指定的分析记录', 'error')
+            return redirect(url_for('history'))
+        
+        # 解析JSON数据
+        result = json.loads(record['result_json'])
+        
+        # 生成HTML报告
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        html = render_template('report.html', record=record, result=result, now=now)
+        
+        # 设置响应头以提示下载
+        response = app.response_class(
+            response=html,
+            status=200,
+            mimetype='text/html'
+        )
+        response.headers.set('Content-Disposition', f'attachment; filename=report_{session_id}.html')
+        
+        return response
+    except Exception as e:
+        flash(f'下载报告时发生错误: {str(e)}', 'error')
+        return redirect(url_for('history'))
+    finally:
+        if conn:
+            conn.close()
+
+# 评价标准页面路由
+@app.route('/standard')
+def standard():
+    return render_template('standard.html')
+
+# 关于系统页面路由
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
+# 历史页面路由
+@app.route('/history')
+def history():
+    # 获取分页参数
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    # 获取筛选参数
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    min_score = request.args.get('min_score', 0, type=int)
+    max_score = request.args.get('max_score', 100, type=int)
+    sort_by = request.args.get('sort_by', 'date')
+    sort_order = request.args.get('sort_order', 'desc')
+    
+    # 验证排序字段和排序顺序
+    allowed_sort_fields = ['id', 'filename', 'date', 'score']
+    allowed_sort_orders = ['asc', 'desc']
+    
+    # 如果提供的排序字段不在允许的列表中，使用默认值'date'
+    if sort_by not in allowed_sort_fields:
+        sort_by = 'date'
+    
+    # 如果提供的排序顺序不在允许的列表中，使用默认值'desc'
+    if sort_order not in allowed_sort_orders:
+        sort_order = 'desc'
+    
+    try:
+        # 计算分页偏移量
+        offset = (page - 1) * per_page
+        
+        # 构建SQL查询
+        sql_query = "SELECT * FROM analysis_history WHERE 1=1"
+        params = []
+        
+        # 添加日期筛选
+        if start_date:
+            sql_query += " AND date >= %s"
+            params.append(start_date)
+        if end_date:
+            sql_query += " AND date <= %s"
+            params.append(end_date)
+        
+        # 添加分数筛选
+        sql_query += " AND score >= %s AND score <= %s"
+        params.extend([min_score, max_score])
+        
+        # 添加排序 - 使用验证过的字段和顺序
+        sql_query += f" ORDER BY {sort_by} {sort_order}"
+        
+        # 连接数据库并执行查询
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 获取总记录数
+        count_sql = sql_query.replace("SELECT *", "SELECT COUNT(*) as total_count")
+        cursor.execute(count_sql, params)
+        total_records = cursor.fetchone()['total_count']
+        
+        # 添加分页限制
+        sql_query += " LIMIT %s, %s"
+        params.extend([offset, per_page])
+        
+        # 执行最终查询
+        cursor.execute(sql_query, params)
+        records = cursor.fetchall()
+        
+        # 计算总页数
+        total_pages = (total_records + per_page - 1) // per_page
+        
+        # 创建分页对象
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total': total_records,
+            'total_pages': total_pages,
+            'has_prev': page > 1,
+            'has_next': page < total_pages,
+            'prev_num': page - 1 if page > 1 else None,
+            'next_num': page + 1 if page < total_pages else None,
+            'pages': range(max(1, page - 2), min(total_pages + 1, page + 3))
+        }
+        
+        return render_template(
+            'history.html',
+            records=records,
+            pagination=pagination,
+            start_date=start_date,
+            end_date=end_date,
+            min_score=min_score,
+            max_score=max_score,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+    except Exception as e:
+        flash(f'获取历史记录时发生错误: {str(e)}', 'error')
+        return render_template('history.html', records=[], pagination={'page': 1, 'total_pages': 1})
+    finally:
+        if conn:
+            conn.close()
+
+# 删除记录路由
+@app.route('/delete_record', methods=['POST'])
+def delete_record():
+    record_id = request.form.get('record_id')
+    
+    if not record_id:
+        flash('记录ID不能为空', 'error')
+        return redirect(url_for('history'))
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 先获取记录信息，用于删除关联的图片文件
+        cursor.execute("SELECT image_path FROM analysis_history WHERE id = %s", (record_id,))
+        record = cursor.fetchone()
+        
+        if record:
+            # 删除关联的图片文件
+            image_path = os.path.join(app.static_folder, record['image_path'])
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    print(f"删除图片文件失败: {str(e)}")
+            
+            # 删除数据库记录
+            cursor.execute("DELETE FROM analysis_history WHERE id = %s", (record_id,))
+            conn.commit()
+            
+            flash('记录已成功删除', 'success')
+        else:
+            flash('找不到指定的记录', 'error')
+    except Exception as e:
+        conn.rollback()
+        flash(f'删除记录时发生错误: {str(e)}', 'error')
+    finally:
+        if conn:
+            conn.close()
+    
+    return redirect(url_for('history'))
+
+# 清空历史记录路由
+@app.route('/clear_history', methods=['POST'])
+def clear_history():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 先获取所有记录的图片路径
+        cursor.execute("SELECT image_path FROM analysis_history")
+        records = cursor.fetchall()
+        
+        # 删除关联的图片文件
+        for record in records:
+            image_path = os.path.join(app.static_folder, record['image_path'])
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    print(f"删除图片文件失败: {str(e)}")
+        
+        # 删除所有记录
+        cursor.execute("DELETE FROM analysis_history")
+        conn.commit()
+        
+        flash('所有历史记录已清空', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'清空历史记录时发生错误: {str(e)}', 'error')
+    finally:
+        if conn:
+            conn.close()
+    
+    return redirect(url_for('history'))
+
+@app.route('/test_db')
+def test_db():
+    """测试数据库连接和查询"""
+    results = []
+    error = None
+    
+    try:
+        # 测试数据库连接
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 检查表是否存在
+        cursor.execute("SHOW TABLES LIKE 'analysis_history'")
+        if not cursor.fetchone():
+            results.append("警告: 'analysis_history'表不存在，可能需要重新初始化数据库")
+        else:
+            results.append("成功: 'analysis_history'表存在")
+            
+            # 查询记录数
+            cursor.execute("SELECT COUNT(*) as count FROM analysis_history")
+            count = cursor.fetchone()['count']
+            results.append(f"分析历史记录总数: {count}")
+            
+            # 查询最近5条记录
+            cursor.execute("SELECT id, filename, date, score FROM analysis_history ORDER BY date DESC LIMIT 5")
+            records = cursor.fetchall()
+            
+            if records:
+                results.append("最近5条记录:")
+                for record in records:
+                    results.append(f"ID: {record['id']}, 文件名: {record['filename']}, 日期: {record['date']}, 分数: {record['score']}")
+            else:
+                results.append("暂无记录")
+        
+        conn.close()
+        results.append("数据库连接测试完成")
+        
+    except Exception as e:
+        error = f"数据库连接或查询失败: {str(e)}"
+        print(error)
+    
+    return render_template('test_db.html', results=results, error=error)
+
+@app.route('/reinitialize_db', methods=['POST'])
+def reinitialize_db():
+    """重新初始化数据库"""
+    try:
+        # 重新初始化数据库
+        import setup_database
+        setup_database.setup_database()
+        flash('数据库已成功重新初始化', 'success')
+    except Exception as e:
+        flash(f'重新初始化数据库失败: {str(e)}', 'error')
+    
+    return redirect(url_for('test_db'))
 
 if __name__ == '__main__':
     print("教学流程图智能批阅系统启动中...")

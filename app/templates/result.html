@@ -1,269 +1,355 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>分析结果 - 教学流程图智能批阅系统</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        .score-card {
-            text-align: center;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .score-value {
-            font-size: 3rem;
-            font-weight: bold;
-        }
-        .score-label {
-            font-size: 1.2rem;
-            color: #666;
-        }
-        .score-high {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .score-medium {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        .score-low {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        .feedback-section {
-            margin-top: 20px;
-            padding: 20px;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-        }
-        .suggestion-item {
-            margin-bottom: 10px;
-            padding: 10px;
-            background-color: #e9ecef;
-            border-radius: 5px;
-        }
-        .image-container {
-            text-align: center;
-            margin: 20px 0;
-        }
-        .image-container img {
-            max-width: 100%;
-            max-height: 800px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-        .image-container img:hover {
-            transform: scale(1.02);
-        }
-        .fullscreen-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.9);
-            z-index: 1000;
-            overflow: auto;
-            text-align: center;
-            padding: 20px;
-        }
-        .fullscreen-image {
-            max-width: 95%;
-            max-height: 95%;
-            margin: auto;
-            display: block;
-            cursor: zoom-out;
-        }
-        .close-button {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            color: white;
-            font-size: 30px;
-            cursor: pointer;
-        }
-        .zoom-controls {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1010;
-            background-color: rgba(255, 255, 255, 0.7);
-            padding: 8px 15px;
-            border-radius: 20px;
-        }
-        .zoom-button {
-            background: #007bff;
-            border: none;
-            color: white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            font-size: 20px;
-            margin: 0 5px;
-            cursor: pointer;
-        }
-        .detail-item {
-            margin: 10px 0;
-            padding: 10px;
-            border-left: 4px solid #ccc;
-            background-color: #f9f9f9;
-            border-radius: 4px;
-        }
-        .detail-item.valid {
-            border-left-color: #198754;  /* Bootstrap success color */
-        }
-        .detail-item.invalid {
-            border-left-color: #dc3545;  /* Bootstrap danger color */
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand" href="/">教学流程图智能批阅系统</a>
-        </div>
-    </nav>
+{% extends "base.html" %}
 
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h3>分析结果</h3>
+{% block title %}分析结果 - 教学流程图智能批阅系统{% endblock %}
+
+{% block extra_css %}
+<style>
+    .score-card {
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .score-value {
+        font-size: 3rem;
+        font-weight: bold;
+    }
+    .score-label {
+        font-size: 1.2rem;
+        color: #666;
+    }
+    .score-high {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    .score-medium {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    .score-low {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    .feedback-section {
+        margin-top: 20px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .suggestion-item {
+        margin-bottom: 10px;
+        padding: 10px;
+        background-color: #e9ecef;
+        border-radius: 5px;
+    }
+    .image-container {
+        text-align: center;
+        margin: 20px 0;
+    }
+    .image-container img {
+        max-width: 100%;
+        max-height: 800px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        cursor: pointer;
+        transition: transform 0.3s;
+    }
+    .image-container img:hover {
+        transform: scale(1.02);
+    }
+    .fullscreen-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.9);
+        z-index: 1000;
+        overflow: auto;
+        text-align: center;
+        padding: 20px;
+    }
+    .fullscreen-image {
+        max-width: 95%;
+        max-height: 95%;
+        margin: auto;
+        display: block;
+        cursor: zoom-out;
+    }
+    .close-button {
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        color: white;
+        font-size: 30px;
+        cursor: pointer;
+    }
+    .zoom-controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1010;
+        background-color: rgba(255, 255, 255, 0.7);
+        padding: 8px 15px;
+        border-radius: 20px;
+    }
+    .zoom-button {
+        background: #007bff;
+        border: none;
+        color: white;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+        margin: 0 5px;
+        cursor: pointer;
+    }
+    .detail-item {
+        margin: 10px 0;
+        padding: 10px;
+        border-left: 4px solid #ccc;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+    }
+    .detail-item.valid {
+        border-left-color: #198754;  /* Bootstrap success color */
+    }
+    .detail-item.invalid {
+        border-left-color: #dc3545;  /* Bootstrap danger color */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>分析结果</h3>
+            </div>
+            <div class="card-body">
+                <div class="image-container">
+                    <img src="{{ url_for('static', filename=image_path) }}" alt="流程图" class="img-fluid">
+                </div>
+                
+                {% if vis_image_path %}
+                <div class="image-container mt-4">
+                    <h4>识别结果可视化</h4>
+                    <img src="{{ url_for('static', filename=vis_image_path) }}" alt="识别结果可视化" class="img-fluid">
+                </div>
+                {% endif %}
+                
+                <!-- 识别详情 -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>识别详情</h5>
+                                <ul class="nav nav-tabs card-header-tabs" id="recognitionTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="shapes-tab" data-bs-toggle="tab" data-bs-target="#shapes" type="button" role="tab" aria-controls="shapes" aria-selected="true">图形 ({{ shapes|length }})</button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="texts-tab" data-bs-toggle="tab" data-bs-target="#texts" type="button" role="tab" aria-controls="texts" aria-selected="false">文本 ({{ text_regions|length }})</button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="nodes-tab" data-bs-toggle="tab" data-bs-target="#nodes" type="button" role="tab" aria-controls="nodes" aria-selected="false">节点 ({{ nodes|length }})</button>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="card-body">
+                                <div class="tab-content" id="recognitionTabsContent">
+                                    <!-- 图形信息 -->
+                                    <div class="tab-pane fade show active" id="shapes" role="tabpanel" aria-labelledby="shapes-tab">
+                                        <div class="table-responsive">
+                                            <table class="table table-striped table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>类型</th>
+                                                        <th>位置 (x, y)</th>
+                                                        <th>尺寸 (w, h)</th>
+                                                        <th>面积</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for shape in shapes %}
+                                                    <tr>
+                                                        <td>{{ loop.index }}</td>
+                                                        <td>{{ shape.type }}</td>
+                                                        <td>({{ shape.position.x }}, {{ shape.position.y }})</td>
+                                                        <td>({{ shape.bbox[2] }}, {{ shape.bbox[3] }})</td>
+                                                        <td>{{ shape.area|int }}</td>
+                                                        <td>{{ shape.text }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 文本信息 -->
+                                    <div class="tab-pane fade" id="texts" role="tabpanel" aria-labelledby="texts-tab">
+                                        <div class="table-responsive">
+                                            <table class="table table-striped table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>文本内容</th>
+                                                        <th>位置 (x, y)</th>
+                                                        <th>置信度</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for text in text_regions %}
+                                                    <tr>
+                                                        <td>{{ loop.index }}</td>
+                                                        <td>{{ text.text }}</td>
+                                                        <td>({{ text.position.x }}, {{ text.position.y }})</td>
+                                                        <td>{{ "%.2f"|format(text.confidence) if text.confidence else "N/A" }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 节点信息 -->
+                                    <div class="tab-pane fade" id="nodes" role="tabpanel" aria-labelledby="nodes-tab">
+                                        <div class="table-responsive">
+                                            <table class="table table-striped table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ID</th>
+                                                        <th>类型</th>
+                                                        <th>文本内容</th>
+                                                        <th>连接节点</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for node in nodes %}
+                                                    <tr>
+                                                        <td>{{ node.id }}</td>
+                                                        <td>{{ node.type }}</td>
+                                                        <td>{{ node.text }}</td>
+                                                        <td>{% for conn in node.connections %}{{ conn }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="image-container">
-                            <img src="{{ url_for('static', filename=image_path) }}" alt="流程图" class="img-fluid">
-                        </div>
-                        
-                        {% if vis_image_path %}
-                        <div class="image-container mt-4">
-                            <h4>识别结果可视化</h4>
-                            <img src="{{ url_for('static', filename=vis_image_path) }}" alt="识别结果可视化" class="img-fluid">
-                        </div>
-                        {% endif %}
-                        
-                        <!-- 识别详情 -->
-                        <div class="row mt-4">
-                            <div class="col-md-12">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5>识别详情</h5>
-                                        <ul class="nav nav-tabs card-header-tabs" id="recognitionTabs" role="tablist">
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link active" id="shapes-tab" data-bs-toggle="tab" data-bs-target="#shapes" type="button" role="tab" aria-controls="shapes" aria-selected="true">图形 ({{ shapes|length }})</button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link" id="texts-tab" data-bs-toggle="tab" data-bs-target="#texts" type="button" role="tab" aria-controls="texts" aria-selected="false">文本 ({{ text_regions|length }})</button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link" id="nodes-tab" data-bs-toggle="tab" data-bs-target="#nodes" type="button" role="tab" aria-controls="nodes" aria-selected="false">节点 ({{ nodes|length }})</button>
-                                            </li>
+                </div>
+                
+                <!-- 统计信息 -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>流程图统计</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>总节点数：</strong> {{ result.statistics.total_nodes if result.statistics and result.statistics.total_nodes is defined else 0 }}</p>
+                                        <p><strong>符合规范：</strong> 
+                                            {% if result.符合规范 is defined and result.符合规范 %}
+                                                <span class="badge bg-success">是</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">否</span>
+                                            {% endif %}
+                                        </p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>节点类型统计：</strong></p>
+                                        <ul>
+                                            {% if result.statistics and result.statistics.node_types is defined %}
+                                                {% for type, count in result.statistics.node_types.items() %}
+                                                    <li>{{ type }}: {{ count }}</li>
+                                                {% endfor %}
+                                            {% else %}
+                                                <li>无数据</li>
+                                            {% endif %}
                                         </ul>
                                     </div>
-                                    <div class="card-body">
-                                        <div class="tab-content" id="recognitionTabsContent">
-                                            <!-- 图形信息 -->
-                                            <div class="tab-pane fade show active" id="shapes" role="tabpanel" aria-labelledby="shapes-tab">
-                                                <div class="table-responsive">
-                                                    <table class="table table-striped table-hover">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>#</th>
-                                                                <th>类型</th>
-                                                                <th>位置 (x, y)</th>
-                                                                <th>尺寸 (w, h)</th>
-                                                                <th>面积</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for shape in shapes %}
-                                                            <tr>
-                                                                <td>{{ loop.index }}</td>
-                                                                <td>{{ shape.type }}</td>
-                                                                <td>({{ shape.position.x }}, {{ shape.position.y }})</td>
-                                                                <td>({{ shape.bbox[2] }}, {{ shape.bbox[3] }})</td>
-                                                                <td>{{ shape.area|int }}</td>
-                                                                <td>{{ shape.text }}</td>
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 分数和评估结果 -->
+                <div class="row mt-4">
+                    <div class="col-lg-12">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5>评估结果</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <div class="score-card score-{% if result.scores.总分 >= 80 %}high{% elif result.scores.总分 >= 60 %}medium{% else %}low{% endif %}">
+                                            <div class="score-value">{{ result.scores.总分 if result.scores.总分 is defined else 0 }}</div>
+                                            <div class="score-label">总分</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <h5>总体评价</h5>
+                                        <div class="detail-item">
+                                            {{ result.feedback if result.feedback is defined else '无总体评价' }}
+                                        </div>
+                                        
+                                        <div class="row mt-3">
+                                            <div class="col-md-6 mb-3">
+                                                <div class="card">
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span>逻辑性</span>
+                                                        <span class="badge bg-{% if result.scores.逻辑性 >= 20 %}success{% elif result.scores.逻辑性 >= 15 %}warning{% else %}danger{% endif %}">{{ result.scores.逻辑性 if result.scores.逻辑性 is defined else 0 }}</span>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p>{{ result.评分理由.逻辑性 if result.评分理由 and result.评分理由.逻辑性 is defined else '无评价' }}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            
-                                            <!-- 文本信息 -->
-                                            <div class="tab-pane fade" id="texts" role="tabpanel" aria-labelledby="texts-tab">
-                                                <div class="table-responsive">
-                                                    <table class="table table-striped table-hover">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>#</th>
-                                                                <th>文本内容</th>
-                                                                <th>位置 (x, y)</th>
-                                                                <th>尺寸 (w, h)</th>
-                                                                {% if text_regions and text_regions[0].confidence is defined %}
-                                                                <th>置信度</th>
-                                                                {% endif %}
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for text in text_regions %}
-                                                            <tr>
-                                                                <td>{{ loop.index }}</td>
-                                                                <td>{{ text.text }}</td>
-                                                                <td>({{ text.position.x }}, {{ text.position.y }})</td>
-                                                                <td>({{ text.bbox[2] }}, {{ text.bbox[3] }})</td>
-                                                                {% if text.confidence is defined %}
-                                                                <td>{{ "%.2f"|format(text.confidence) }}</td>
-                                                                {% endif %}
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
+                                            <div class="col-md-6 mb-3">
+                                                <div class="card">
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span>合理性</span>
+                                                        <span class="badge bg-{% if result.scores.合理性 >= 20 %}success{% elif result.scores.合理性 >= 15 %}warning{% else %}danger{% endif %}">{{ result.scores.合理性 if result.scores.合理性 is defined else 0 }}</span>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p>{{ result.评分理由.合理性 if result.评分理由 and result.评分理由.合理性 is defined else '无评价' }}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            
-                                            <!-- 节点信息 -->
-                                            <div class="tab-pane fade" id="nodes" role="tabpanel" aria-labelledby="nodes-tab">
-                                                <div class="table-responsive">
-                                                    <table class="table table-striped table-hover">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>ID</th>
-                                                                <th>类型</th>
-                                                                <th>文本</th>
-                                                                <th>位置 (x, y)</th>
-                                                                <th>连接到</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for node in nodes %}
-                                                            <tr>
-                                                                <td>{{ node.id }}</td>
-                                                                <td>{{ node.type }}</td>
-                                                                <td>{{ node.text }}</td>
-                                                                <td>({{ node.position.x }}, {{ node.position.y }})</td>
-                                                                <td>
-                                                                    {% if node.connections %}
-                                                                        {{ node.connections|join(', ') }}
-                                                                    {% else %}
-                                                                        无
-                                                                    {% endif %}
-                                                                </td>
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
+                                            <div class="col-md-6 mb-3">
+                                                <div class="card">
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span>清晰度</span>
+                                                        <span class="badge bg-{% if result.scores.清晰度 >= 20 %}success{% elif result.scores.清晰度 >= 15 %}warning{% else %}danger{% endif %}">{{ result.scores.清晰度 if result.scores.清晰度 is defined else 0 }}</span>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p>{{ result.评分理由.清晰度 if result.评分理由 and result.评分理由.清晰度 is defined else '无评价' }}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <div class="card">
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span>创新性</span>
+                                                        <span class="badge bg-{% if result.scores.创新性 >= 20 %}success{% elif result.scores.创新性 >= 15 %}warning{% else %}danger{% endif %}">{{ result.scores.创新性 if result.scores.创新性 is defined else 0 }}</span>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p>{{ result.评分理由.创新性 if result.评分理由 and result.评分理由.创新性 is defined else '无评价' }}</p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -271,161 +357,46 @@
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="row mt-4">
-                            <!-- 总分 -->
-                            <div class="col-md-4 offset-md-4">
-                                <div class="score-card 
-                                    {% if result.scores.总分 >= 80 %}score-high
-                                    {% elif result.scores.总分 >= 60 %}score-medium
-                                    {% else %}score-low{% endif %}">
-                                    <div class="score-value">{{ result.scores.总分 if result.scores.总分 is defined else 0 }}</div>
-                                    <div class="score-label">总分</div>
-                                </div>
+                    </div>
+                </div>
+                
+                <!-- 改进建议 -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>改进建议</h5>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-group">
+                                    {% if result.改进建议 is defined and result.改进建议|length > 0 %}
+                                        {% for suggestion in result.改进建议 %}
+                                            <li class="list-group-item">{{ suggestion }}</li>
+                                        {% endfor %}
+                                    {% else %}
+                                        <li class="list-group-item">无改进建议</li>
+                                    {% endif %}
+                                </ul>
                             </div>
                         </div>
-                        
-                        <div class="row mt-4">
-                            <!-- 各项评分 -->
-                            <div class="col-md-3">
-                                <div class="score-card 
-                                    {% if result.scores.逻辑性 >= 20 %}score-high
-                                    {% elif result.scores.逻辑性 >= 15 %}score-medium
-                                    {% else %}score-low{% endif %}">
-                                    <div class="score-value">{{ result.scores.逻辑性 if result.scores.逻辑性 is defined else 0 }}</div>
-                                    <div class="score-label">逻辑性</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="score-card 
-                                    {% if result.scores.合理性 >= 20 %}score-high
-                                    {% elif result.scores.合理性 >= 15 %}score-medium
-                                    {% else %}score-low{% endif %}">
-                                    <div class="score-value">{{ result.scores.合理性 if result.scores.合理性 is defined else 0 }}</div>
-                                    <div class="score-label">合理性</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="score-card 
-                                    {% if result.scores.清晰度 >= 20 %}score-high
-                                    {% elif result.scores.清晰度 >= 15 %}score-medium
-                                    {% else %}score-low{% endif %}">
-                                    <div class="score-value">{{ result.scores.清晰度 if result.scores.清晰度 is defined else 0 }}</div>
-                                    <div class="score-label">清晰度</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="score-card 
-                                    {% if result.scores.创新性 >= 20 %}score-high
-                                    {% elif result.scores.创新性 >= 15 %}score-medium
-                                    {% else %}score-low{% endif %}">
-                                    <div class="score-value">{{ result.scores.创新性 if result.scores.创新性 is defined else 0 }}</div>
-                                    <div class="score-label">创新性</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 评分理由 -->
-                        <div class="row mt-4">
-                            <div class="col-md-12">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5>评分理由</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <h6 class="fw-bold">逻辑性 ({{ result.scores.逻辑性 if result.scores.逻辑性 is defined else 0 }}/25分)</h6>
-                                                    <p>{{ result.评分理由.逻辑性 if result.评分理由 is defined and result.评分理由.逻辑性 is defined else '无评分理由' }}</p>
-                                                </div>
-                                                <div class="mb-3">
-                                                    <h6 class="fw-bold">合理性 ({{ result.scores.合理性 if result.scores.合理性 is defined else 0 }}/25分)</h6>
-                                                    <p>{{ result.评分理由.合理性 if result.评分理由 is defined and result.评分理由.合理性 is defined else '无评分理由' }}</p>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <h6 class="fw-bold">清晰度 ({{ result.scores.清晰度 if result.scores.清晰度 is defined else 0 }}/25分)</h6>
-                                                    <p>{{ result.评分理由.清晰度 if result.评分理由 is defined and result.评分理由.清晰度 is defined else '无评分理由' }}</p>
-                                                </div>
-                                                <div class="mb-3">
-                                                    <h6 class="fw-bold">创新性 ({{ result.scores.创新性 if result.scores.创新性 is defined else 0 }}/25分)</h6>
-                                                    <p>{{ result.评分理由.创新性 if result.评分理由 is defined and result.评分理由.创新性 is defined else '无评分理由' }}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 统计信息 -->
-                        <div class="row mt-4">
-                            <div class="col-md-12">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h5>流程图统计</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <p><strong>总节点数：</strong> {{ result.statistics.total_nodes if result.statistics.total_nodes is defined else 0 }}</p>
-                                                <p><strong>符合规范：</strong> 
-                                                    {% if result.符合规范 is defined and result.符合规范 %}
-                                                        <span class="badge bg-success">是</span>
-                                                    {% else %}
-                                                        <span class="badge bg-danger">否</span>
-                                                    {% endif %}
-                                                </p>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <p><strong>节点类型统计：</strong></p>
-                                                <ul>
-                                                    {% if result.statistics.node_types is defined %}
-                                                        {% for type, count in result.statistics.node_types.items() %}
-                                                            <li>{{ type }}: {{ count }}</li>
-                                                        {% endfor %}
-                                                    {% else %}
-                                                        <li>无数据</li>
-                                                    {% endif %}
-                                                </ul>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 反馈意见 -->
-                        <div class="feedback-section mt-4">
-                            <h4>评价反馈</h4>
-                            <div class="card mb-3">
-                                <div class="card-body">
-                                    <p>{{ result.feedback if result.feedback is defined else '无反馈意见' }}</p>
-                                </div>
-                            </div>
-                            
-                            {% if result.改进建议 is defined and result.改进建议|length > 0 %}
-                                <h4>改进建议</h4>
-                                <div class="list-group">
-                                    {% for suggestion in result.改进建议 %}
-                                        <div class="suggestion-item">
-                                            <i class="bi bi-lightbulb"></i> {{ suggestion }}
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
+                    </div>
+                </div>
+                
+                <!-- 操作按钮 -->
+                <div class="row mt-4">
+                    <div class="col-md-12 text-center">
+                        <a href="/" class="btn btn-primary">返回首页</a>
+                        <a href="/download-report/{{ session_id }}" class="btn btn-success">下载报告</a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 在原有的结果展示区域后添加验证结果部分 -->
-    <div class="container mt-4">
-        <!-- 将原本隐藏的验证结果显示出来 -->
+<!-- 验证结果部分 -->
+<div class="row mt-4">
+    <div class="col-md-12">
         <div class="validation-results">
             <div class="card">
                 <div class="card-header">
@@ -472,9 +443,11 @@
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 添加流程图模块组合检查结果 -->
-    <div class="container mt-4">
+<!-- 流程图模块组合检查结果 -->
+<div class="row mt-4">
+    <div class="col-md-12">
         <div class="module-check-results">
             <div class="card">
                 <div class="card-header">
@@ -538,98 +511,101 @@
                     {% endif %}
                     
                     <div class="mt-3">
-                        <p class="text-muted small"><strong>注：</strong>规范要求流程图中包含"矩形-平行四边形-圆角矩形"的模块组合。矩形表示活动，平行四边形表示输入/输出，圆角矩形表示功能或媒介。</p>
+                        <p class="text-muted small"><strong>注：</strong>规范要求流程图中包含"矩形-平行四边形-圆角矩形"的模块组合。矩形表示活动，平行四边形表示输入/输出，圆角矩形表示执行活动的媒介或功能。</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 添加新的"返回首页"按钮在页脚之前，居中显示 -->
-    <div class="container mt-5 mb-5">
-        <div class="text-center">
-            <a href="/" class="btn btn-primary btn-lg px-5">返回首页</a>
-        </div>
+<!-- 全屏图像查看器 -->
+<div class="fullscreen-overlay" id="fullscreen-overlay">
+    <span class="close-button" id="close-button">&times;</span>
+    <img class="fullscreen-image" id="fullscreen-image" src="" alt="全屏图像">
+    <div class="zoom-controls">
+        <button class="zoom-button" id="zoom-in">+</button>
+        <button class="zoom-button" id="zoom-out">-</button>
+        <button class="zoom-button" id="zoom-reset">&#8634;</button>
     </div>
+</div>
+{% endblock %}
 
-    <footer class="bg-light py-4 mt-5">
-        <div class="container text-center">
-            <p>© 2025 教学流程图智能批阅系统 | 基于计算机视觉和人工智能技术</p>
-        </div>
-    </footer>
-
-    <!-- 全屏图片显示覆盖层 -->
-    <div id="fullscreen-overlay" class="fullscreen-overlay">
-        <span class="close-button" onclick="closeFullscreen()">&times;</span>
-        <img id="fullscreen-image" class="fullscreen-image" src="" alt="放大图片">
-        <div class="zoom-controls">
-            <button class="zoom-button" onclick="zoomImage(-0.1)">-</button>
-            <button class="zoom-button" onclick="zoomImage(0.1)">+</button>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // 当前缩放级别
-        let currentZoom = 1;
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 图像点击放大功能
+        const images = document.querySelectorAll('.image-container img');
+        const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+        const fullscreenImage = document.getElementById('fullscreen-image');
+        const closeButton = document.getElementById('close-button');
+        const zoomIn = document.getElementById('zoom-in');
+        const zoomOut = document.getElementById('zoom-out');
+        const zoomReset = document.getElementById('zoom-reset');
+        let currentScale = 1;
         
-        // 为所有图片添加点击事件
-        document.addEventListener('DOMContentLoaded', function() {
-            const images = document.querySelectorAll('.image-container img');
-            images.forEach(img => {
-                img.addEventListener('click', function() {
-                    showFullscreen(this.src);
-                });
+        // 点击图片显示全屏
+        images.forEach(img => {
+            img.addEventListener('click', function() {
+                fullscreenImage.src = this.src;
+                fullscreenOverlay.style.display = 'block';
+                currentScale = 1;
+                fullscreenImage.style.transform = `scale(${currentScale})`;
+                document.body.style.overflow = 'hidden'; // 防止滚动
             });
         });
         
-        // 显示全屏图片
-        function showFullscreen(src) {
-            const fullscreenImage = document.getElementById('fullscreen-image');
-            fullscreenImage.src = src;
-            document.getElementById('fullscreen-overlay').style.display = 'block';
-            currentZoom = 1;
-            fullscreenImage.style.transform = `scale(${currentZoom})`;
-            
-            // 阻止滚动
-            document.body.style.overflow = 'hidden';
-        }
-        
-        // 关闭全屏图片
-        function closeFullscreen() {
-            document.getElementById('fullscreen-overlay').style.display = 'none';
-            
-            // 恢复滚动
-            document.body.style.overflow = '';
-        }
-        
-        // 缩放图片
-        function zoomImage(delta) {
-            currentZoom += delta;
-            // 限制缩放范围在0.5到3之间
-            currentZoom = Math.max(0.5, Math.min(3, currentZoom));
-            document.getElementById('fullscreen-image').style.transform = `scale(${currentZoom})`;
-        }
-        
-        // 点击全屏图片外的区域关闭全屏
-        document.getElementById('fullscreen-overlay').addEventListener('click', function(e) {
-            if (e.target === this) {
+        // 关闭全屏
+        closeButton.addEventListener('click', closeFullscreen);
+        fullscreenOverlay.addEventListener('click', function(e) {
+            if (e.target === fullscreenOverlay) {
                 closeFullscreen();
             }
         });
         
-        // 键盘事件处理
+        function closeFullscreen() {
+            fullscreenOverlay.style.display = 'none';
+            document.body.style.overflow = 'auto'; // 恢复滚动
+        }
+        
+        // 缩放控制
+        zoomIn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            currentScale += 0.2;
+            fullscreenImage.style.transform = `scale(${currentScale})`;
+        });
+        
+        zoomOut.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (currentScale > 0.4) {
+                currentScale -= 0.2;
+                fullscreenImage.style.transform = `scale(${currentScale})`;
+            }
+        });
+        
+        zoomReset.addEventListener('click', function(e) {
+            e.stopPropagation();
+            currentScale = 1;
+            fullscreenImage.style.transform = `scale(${currentScale})`;
+        });
+        
+        // 键盘支持
         document.addEventListener('keydown', function(e) {
-            if (document.getElementById('fullscreen-overlay').style.display === 'block') {
+            if (fullscreenOverlay.style.display === 'block') {
                 if (e.key === 'Escape') {
                     closeFullscreen();
                 } else if (e.key === '+' || e.key === '=') {
-                    zoomImage(0.1);
-                } else if (e.key === '-') {
-                    zoomImage(-0.1);
+                    currentScale += 0.2;
+                    fullscreenImage.style.transform = `scale(${currentScale})`;
+                } else if (e.key === '-' && currentScale > 0.4) {
+                    currentScale -= 0.2;
+                    fullscreenImage.style.transform = `scale(${currentScale})`;
+                } else if (e.key === '0') {
+                    currentScale = 1;
+                    fullscreenImage.style.transform = `scale(${currentScale})`;
                 }
             }
         });
-    </script>
-</body>
-</html> 
+    });
+</script>
+{% endblock %} 
