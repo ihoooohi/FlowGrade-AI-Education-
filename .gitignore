@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+flowchart_env/
+venv/
+ENV/
+
+# 数据库
+*.db
+*.sqlite3
+
+# 上传的文件
+app/static/uploads/*
+!app/static/uploads/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 环境变量
+.env
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+.DS_Store
+
+# 大文件
+*.pyd
+*.dll 

@@ -28,52 +28,61 @@ class QwenValidator:
                     "error": f"节点 {i+1} 数据格式错误，缺少必要字段"
                 }
         
-        # 构建提示词
-        prompt = self._build_prompt(nodes)
-        print("生成的提示词:")
-        print(prompt)
-        
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        # 使用兼容模式的messages格式
-        data = {
-            "model": "qwen-plus",
-            "messages": [
-                {"role": "system", "content": "你是一个专业的流程图符号验证专家，负责评估流程图中的图形与文本是否匹配。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.1,
-            "top_p": 0.8,
-            "max_tokens": 2000
-        }
-        
         try:
-            print("开始调用千问API...")
-            response = requests.post(self.api_url, headers=headers, json=data)
-            print(f"API响应状态码: {response.status_code}")
+            # 构建提示词
+            prompt = self._build_prompt(nodes)
+            print("生成的提示词:")
+            print(prompt)
             
-            if response.status_code != 200:
-                print(f"API错误响应: {response.text}")
-                
-            response.raise_for_status()
-            result = response.json()
-            print("成功获取API响应")
-            
-            parse_result = self._parse_response(result)
-            print(f"解析结果: {parse_result['success']}")
-            return parse_result
-        except requests.RequestException as e:
-            error_msg = f"API请求错误: {str(e)}"
-            print(error_msg)
-            return {
-                "success": False,
-                "error": error_msg
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
             }
+            
+            # 使用兼容模式的messages格式
+            data = {
+                "model": "qwen-plus",
+                "messages": [
+                    {"role": "system", "content": "你是一个专业的流程图符号验证专家，负责评估流程图中的图形与文本是否匹配。"},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1,
+                "top_p": 0.8,
+                "max_tokens": 2000
+            }
+            
+            try:
+                print("开始调用千问API...")
+                response = requests.post(self.api_url, headers=headers, json=data)
+                print(f"API响应状态码: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"API错误响应: {response.text}")
+                    
+                response.raise_for_status()
+                result = response.json()
+                print("成功获取API响应")
+                
+                parse_result = self._parse_response(result)
+                print(f"解析结果: {parse_result['success']}")
+                return parse_result
+            except requests.RequestException as e:
+                error_msg = f"API请求错误: {str(e)}"
+                print(error_msg)
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+            except Exception as e:
+                error_msg = f"调用千问API时发生未知错误: {str(e)}"
+                print(error_msg)
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
         except Exception as e:
-            error_msg = f"调用千问API时发生未知错误: {str(e)}"
+            import traceback
+            error_msg = f"验证过程中发生错误: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             return {
                 "success": False,
@@ -83,8 +92,8 @@ class QwenValidator:
     def _build_prompt(self, nodes):
         """构建提示词"""
         rules = """请依据以下规则判断每个图形与文本的匹配是否正确：
-1. 矩形框：必须表示教学活动或步骤（例如"教师讲解"）
-2. 平行四边形：必须表示输入/输出（例如"学生提交作业"）
+1. 矩形框：必须表示教师的教学活动或步骤（例如"教师讲解"）
+2. 平行四边形：必须表示学生的输入/输出行为（例如"学生提交作业"或"学生思考"）
 3. 菱形框：必须表示决策或分支（例如"是否达标？"）
 4. 圆角矩形：在流程开头和结尾表示流程的开始和结束（例如"开始"、"结束"），在流程中间出现时表示教学媒介和演示内容（例如"多媒体课件展示"）
 

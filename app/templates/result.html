@@ -177,16 +177,22 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {% for shape in shapes %}
-                                                    <tr>
-                                                        <td>{{ loop.index }}</td>
-                                                        <td>{{ shape.type }}</td>
-                                                        <td>({{ shape.position.x }}, {{ shape.position.y }})</td>
-                                                        <td>({{ shape.bbox[2] }}, {{ shape.bbox[3] }})</td>
-                                                        <td>{{ shape.area|int }}</td>
-                                                        <td>{{ shape.text }}</td>
-                                                    </tr>
-                                                    {% endfor %}
+                                                    {% if shapes|length > 0 %}
+                                                        {% for shape in shapes %}
+                                                        <tr>
+                                                            <td>{{ loop.index }}</td>
+                                                            <td>{{ shape.type }}</td>
+                                                            <td>({{ shape.position.x if shape.position and shape.position.x is defined else 0 }}, {{ shape.position.y if shape.position and shape.position.y is defined else 0 }})</td>
+                                                            <td>({{ shape.bbox[2] if shape.bbox and shape.bbox[2] is defined else 0 }}, {{ shape.bbox[3] if shape.bbox and shape.bbox[3] is defined else 0 }})</td>
+                                                            <td>{{ shape.area|int if shape.area is defined else 0 }}</td>
+                                                            <td>{{ shape.text if shape.text is defined else '' }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <tr>
+                                                            <td colspan="6" class="text-center">暂无图形识别数据</td>
+                                                        </tr>
+                                                    {% endif %}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -205,14 +211,20 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {% for text in text_regions %}
-                                                    <tr>
-                                                        <td>{{ loop.index }}</td>
-                                                        <td>{{ text.text }}</td>
-                                                        <td>({{ text.position.x }}, {{ text.position.y }})</td>
-                                                        <td>{{ "%.2f"|format(text.confidence) if text.confidence else "N/A" }}</td>
-                                                    </tr>
-                                                    {% endfor %}
+                                                    {% if text_regions|length > 0 %}
+                                                        {% for text in text_regions %}
+                                                        <tr>
+                                                            <td>{{ loop.index }}</td>
+                                                            <td>{{ text.text }}</td>
+                                                            <td>({{ text.position.x if text.position and text.position.x is defined else 0 }}, {{ text.position.y if text.position and text.position.y is defined else 0 }})</td>
+                                                            <td>{{ "%.2f"|format(text.confidence) if text.confidence is defined else "N/A" }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <tr>
+                                                            <td colspan="4" class="text-center">暂无文本识别数据</td>
+                                                        </tr>
+                                                    {% endif %}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -227,18 +239,22 @@
                                                         <th>ID</th>
                                                         <th>类型</th>
                                                         <th>文本内容</th>
-                                                        <th>连接节点</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {% for node in nodes %}
-                                                    <tr>
-                                                        <td>{{ node.id }}</td>
-                                                        <td>{{ node.type }}</td>
-                                                        <td>{{ node.text }}</td>
-                                                        <td>{% for conn in node.connections %}{{ conn }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
-                                                    </tr>
-                                                    {% endfor %}
+                                                    {% if nodes|length > 0 %}
+                                                        {% for node in nodes %}
+                                                        <tr>
+                                                            <td>{{ node.id if node.id is defined else loop.index0 }}</td>
+                                                            <td>{{ node.type if node.type is defined else (node.shape_type if node.shape_type is defined else '未知') }}</td>
+                                                            <td>{{ node.text if node.text is defined else '' }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <tr>
+                                                            <td colspan="4" class="text-center">暂无节点数据</td>
+                                                        </tr>
+                                                    {% endif %}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -468,9 +484,13 @@
                                             <span class="badge bg-primary">模块 {{ loop.index }}</span>
                                         </div>
                                         <div>
-                                            <span class="badge bg-secondary">位置 #{{ module[0] }}</span> → 
-                                            <span class="badge bg-secondary">位置 #{{ module[1] }}</span> → 
+                                            <span class="badge bg-secondary">位置 #{{ module[0] if module|length > 0 else '?' }}</span>
+                                            {% if module|length > 1 %} → 
+                                            <span class="badge bg-secondary">位置 #{{ module[1] }}</span>
+                                            {% endif %}
+                                            {% if module|length > 2 %} → 
                                             <span class="badge bg-secondary">位置 #{{ module[2] }}</span>
+                                            {% endif %}
                                         </div>
                                     </div>
                                     <!-- 添加模块中各图形的类型和文字内容 -->
@@ -480,8 +500,12 @@
                                                 <div class="card border-primary mb-2">
                                                     <div class="card-header py-1 bg-light">矩形</div>
                                                     <div class="card-body py-2">
+                                                        {% if module|length > 0 and module[0]|int < nodes|length %}
                                                         <p class="mb-1"><strong>图形类型：</strong>{{ nodes[module[0]].shape_type }}</p>
                                                         <p class="mb-0"><strong>文本内容：</strong>{{ nodes[module[0]].text }}</p>
+                                                        {% else %}
+                                                        <p class="mb-0 text-muted">数据不可用</p>
+                                                        {% endif %}
                                                     </div>
                                                 </div>
                                             </div>
@@ -489,8 +513,12 @@
                                                 <div class="card border-primary mb-2">
                                                     <div class="card-header py-1 bg-light">平行四边形</div>
                                                     <div class="card-body py-2">
+                                                        {% if module|length > 1 and module[1]|int < nodes|length %}
                                                         <p class="mb-1"><strong>图形类型：</strong>{{ nodes[module[1]].shape_type }}</p>
                                                         <p class="mb-0"><strong>文本内容：</strong>{{ nodes[module[1]].text }}</p>
+                                                        {% else %}
+                                                        <p class="mb-0 text-muted">数据不可用</p>
+                                                        {% endif %}
                                                     </div>
                                                 </div>
                                             </div>
@@ -498,8 +526,12 @@
                                                 <div class="card border-primary mb-2">
                                                     <div class="card-header py-1 bg-light">圆角矩形</div>
                                                     <div class="card-body py-2">
+                                                        {% if module|length > 2 and module[2]|int < nodes|length %}
                                                         <p class="mb-1"><strong>图形类型：</strong>{{ nodes[module[2]].shape_type }}</p>
                                                         <p class="mb-0"><strong>文本内容：</strong>{{ nodes[module[2]].text }}</p>
+                                                        {% else %}
+                                                        <p class="mb-0 text-muted">数据不可用</p>
+                                                        {% endif %}
                                                     </div>
                                                 </div>
                                             </div>

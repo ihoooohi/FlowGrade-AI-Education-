@@ -213,7 +213,7 @@ class RealFlowchartAnalyzer:
                 node['text'] = ''
         
         print(f"流程图分析完成，共 {len(nodes)} 个节点")
-                
+        
         return {
             "nodes": nodes,
             "connections": connections,
@@ -435,321 +435,285 @@ class RealImageProcessor:
         
     def process(self, image_path):
         """处理流程图图像"""
-        try:
-            # 读取图像
-            image = cv2.imread(image_path)
-            if image is None:
-                raise ValueError(f"无法读取图像: {image_path}")
-            # 保存原始图像尺寸
-            original_height, original_width = image.shape[:2]
-            # 转换为灰度图
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            # 应用高斯模糊减少噪声
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # 读取图像
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"无法读取图像: {image_path}")
+        
+        # 保存原始图像尺寸
+        original_height, original_width = image.shape[:2]
+        
+        # 转换为灰度图
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # 应用高斯模糊减少噪声
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # 使用自适应阈值处理，更好地处理不同光照条件下的图像
+        binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                      cv2.THRESH_BINARY_INV, 11, 2)
+        
+        # 形态学操作：开运算，去除小噪点
+        kernel = np.ones((3, 3), np.uint8)
+        opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
+        
+        # 形态学操作：闭运算，连接断开的线条
+        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel, iterations=2)
+        
+        # 创建调试图像
+        debug_image = image.copy()
+        
+        # 保存预处理图像
+        preprocess_path = os.path.join(app.config['UPLOAD_FOLDER'], f"preprocess_{uuid.uuid4()}.jpg")
+        cv2.imwrite(preprocess_path, closed)
+        print(f"预处理图像已保存: {preprocess_path}")
+        
+        # 查找轮廓 - 使用RETR_EXTERNAL只获取外部轮廓
+        contours_external, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 查找轮廓 - 使用RETR_CCOMP获取层次结构
+        contours_all, hierarchy = cv2.findContours(closed.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 合并两种轮廓检测结果 - 修复：确保所有轮廓都是相同类型
+        contours = []
+        for c in contours_external:
+            if c.shape[0] >= 4:  # 至少需要4个点
+                contours.append(c)
+        for c in contours_all:
+            if c.shape[0] >= 4 and not any(np.array_equal(c, existing) for existing in contours):  # 避免重复
+                contours.append(c)
+        
+        # 处理和分类图形
+        shapes = []
+        
+        # 过滤和处理轮廓
+        for i, contour in enumerate(contours):
+            # 计算轮廓面积
+            area = cv2.contourArea(contour)
             
-            # 使用自适应阈值处理，更好地处理不同光照条件下的图像
-            binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                          cv2.THRESH_BINARY_INV, 11, 2)
+            # 过滤小面积和大面积轮廓
+            if area < self.min_shape_area or area > self.max_shape_area:
+                continue
             
-            # 形态学操作：开运算，去除小噪点
-            kernel = np.ones((3, 3), np.uint8)
-            opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
-            
-            # 形态学操作：闭运算，连接断开的线条
-            closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel, iterations=2)
-            
-            # 创建调试图像
-            debug_image = image.copy()
-            
-            # 保存预处理图像
-            preprocess_path = os.path.join(app.config['UPLOAD_FOLDER'], f"preprocess_{uuid.uuid4()}.jpg")
-            cv2.imwrite(preprocess_path, closed)
-            print(f"预处理图像已保存: {preprocess_path}")
-            
-            # 安全处理轮廓检测 - 使用try-except包装
-            try:
-                # 查找轮廓 - 使用RETR_EXTERNAL只获取外部轮廓
-                contours_external, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
-                # 查找轮廓 - 使用RETR_CCOMP获取层次结构
-                contours_all, hierarchy = cv2.findContours(closed.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-            except ValueError as e:
-                print(f"轮廓检测错误 (可能是OpenCV版本问题): {e}")
-                # 尝试不同的返回值格式处理 (OpenCV 3.x 和 4.x 有区别)
-                try:
-                    # OpenCV 3.x 版本的处理
-                    _, contours_external, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    _, contours_all, hierarchy = cv2.findContours(closed.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-                except Exception as e2:
-                    print(f"备选轮廓检测方法也失败: {e2}")
-                    # 如果仍然失败，返回空结果
-                    return image, []
-            
-            # 合并两种轮廓检测结果 - 修复：确保所有轮廓都是相同类型
-            contours = []
-            for c in contours_external:
-                if c.shape[0] >= 4:  # 至少需要4个点
-                    contours.append(c)
-            for c in contours_all:
-                if c.shape[0] >= 4 and not any(np.array_equal(c, existing) for existing in contours):  # 避免重复
-                    contours.append(c)
-            
-            # 处理和分类图形
-            shapes = []
-            
-            # 过滤和处理轮廓
-            for i, contour in enumerate(contours):
-                try:
-                    # 计算轮廓面积
-                    area = cv2.contourArea(contour)
-                    # 过滤小面积和大面积轮廓
-                    if area < self.min_shape_area or area > self.max_shape_area:
-                        continue
-                    # 获取边界框
-                    x, y, w, h = cv2.boundingRect(contour)
-                    rect_area = w * h
-                    # 计算面积比
-                    area_ratio = area / rect_area if rect_area > 0 else 0
-                    # 计算最小外接矩形面积比
-                    min_rect = cv2.minAreaRect(contour)
-                    min_rect_width, min_rect_height = min_rect[1]
-                    min_rect_area = min_rect_width * min_rect_height
-                    # 计算轮廓与最小外接矩形的面积比
-                    min_rect_area_ratio = area / min_rect_area if min_rect_area > 0 else 0
-                    
-                    # 过滤掉接近图像边缘的轮廓（可能是整个图像的边框）
-                    if x <= 5 or y <= 5 or x + w >= original_width - 5 or y + h >= original_height - 5:
-                        continue
-                    
-                    # 计算中心点
-                    center = (x + w // 2, y + h // 2)
-                    
-                    # 安全地确定图形类型
-                    try:
-                        shape_type, confidence = self._determine_shape_type(contour, area)
-                    except Exception as e:
-                        print(f"确定图形 {i} 类型时出错: {e}")
-                        shape_type, confidence = "未知", 0.0
-                    
-                    # 打印图形信息
-                    print(f"图形 {i} - 类型: {shape_type}, area_ratio: {area_ratio:.4f}, min_rect_area_ratio: {min_rect_area_ratio:.4f}")
-                    
-                    # 创建Shape对象
-                    shape = {
-                        "type": shape_type,
-                        "contour": contour.tolist(),
-                        "bbox": (x, y, w, h),
-                        "center": center,
-                        "area": area,
-                        "confidence": confidence,
-                        "position": {"x": center[0], "y": center[1]},
-                        "text": ""  # 初始化文本字段
-                    }
-                    
-                    # 在调试图像上绘制轮廓和类型
-                    color = (0, 255, 0)  # 默认绿色
-                    if shape_type == "菱形" or shape_type == "diamond":
-                        color = (0, 0, 255)  # 红色
-                    elif shape_type == "椭圆" or shape_type == "ellipse":
-                        color = (255, 0, 0)  # 蓝色
-                    elif shape_type == "平行四边形" or shape_type == "parallelogram":
-                        color = (0, 255, 255)  # 黄色
-                        
-                    cv2.drawContours(debug_image, [contour], 0, color, 2)
-                    cv2.putText(debug_image, f"{i}: {shape_type}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                    
-                    shapes.append(shape)
-                except Exception as e:
-                    print(f"处理轮廓 {i} 时出错: {e}")
-                    continue
-            
-            # 按照y坐标从上到下排序图形
-            shapes.sort(key=lambda shape: shape["position"]["y"])
-            
-            # 重新编号并更新调试图像
-            debug_image = image.copy()  # 重新创建调试图像
-            for i, shape in enumerate(shapes):
-                try:
-                    # 获取边界框
-                    x, y, w, h = shape["bbox"]
-                    
-                    # 重新绘制轮廓和编号
-                    contour = np.array(shape["contour"], dtype=np.int32)
-                    
-                    # 设置颜色
-                    color = (0, 255, 0)  # 默认绿色
-                    if shape["type"] == "菱形" or shape["type"] == "diamond":
-                        color = (0, 0, 255)  # 红色
-                    elif shape["type"] == "椭圆" or shape["type"] == "ellipse":
-                        color = (255, 0, 0)  # 蓝色
-                    elif shape["type"] == "平行四边形" or shape["type"] == "parallelogram":
-                        color = (0, 255, 255)  # 黄色
-                        
-                    cv2.drawContours(debug_image, [contour], 0, color, 2)
-                    cv2.putText(debug_image, f"{i}: {shape['type']}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                    
-                    # 打印排序后的图形信息
-                    print(f"排序后 图形 {i} - 类型: {shape['type']}, 位置: y={shape['position']['y']}")
-                except Exception as e:
-                    print(f"更新图形 {i} 绘制时出错: {e}")
-            
-            # 保存调试图像
-            debug_path = os.path.join(app.config['UPLOAD_FOLDER'], f"debug_{uuid.uuid4()}.jpg")
-            cv2.imwrite(debug_path, debug_image)
-            print(f"调试图像已保存: {debug_path}")
-            
-            return image, shapes
-            
-        except Exception as e:
-            import traceback
-            print(f"图像处理过程中出错: {str(e)}")
-            print(traceback.format_exc())
-            # 返回原始图像和空的形状列表，以便后续处理能继续
-            return cv2.imread(image_path) if image_path and os.path.exists(image_path) else np.zeros((100, 100, 3), dtype=np.uint8), []
-    
-    def _determine_shape_type(self, contour, area):
-        """确定轮廓的图形类型：矩形、平行四边形、菱形、圆角矩形"""
-        try:
-            # 近似多边形
-            epsilon = 0.02 * cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, epsilon, True)
-
-            # 获取边界框和最小外接矩形
+            # 获取边界框
             x, y, w, h = cv2.boundingRect(contour)
             rect_area = w * h
-
-            # 计算轮廓与边界框的面积比
-            area_ratio = area / rect_area
-
-            # 计算宽高比
-            aspect_ratio = float(w) / h if h > 0 else 0
-
-            # 获取最小外接矩形（可能有旋转）
+            
+            # 计算面积比
+            area_ratio = area / rect_area if rect_area > 0 else 0
+            
+            # 计算最小外接矩形面积比
             min_rect = cv2.minAreaRect(contour)
             min_rect_width, min_rect_height = min_rect[1]
             min_rect_area = min_rect_width * min_rect_height
-
+        
             # 计算轮廓与最小外接矩形的面积比
             min_rect_area_ratio = area / min_rect_area if min_rect_area > 0 else 0
-
-            # 获取轮廓的角点
-            corners = self._get_corner_points(contour)
             
-            # 非圆角矩形，但点数接近4的可能是四边形
-            if 4 <= len(approx) <= 6:
-                # 计算角点间的角度分布
-                angles = self._calculate_corner_angles(corners)
-                angle_std = np.std(angles) if angles else 0
+            # 过滤掉接近图像边缘的轮廓（可能是整个图像的边框）
+            if x <= 5 or y <= 5 or x + w >= original_width - 5 or y + h >= original_height - 5:
+                continue
+            
+            # 计算中心点
+            center = (x + w // 2, y + h // 2)
+            
+            # 确定图形类型
+            shape_type, confidence = self._determine_shape_type(contour, area)
+            
+            # 打印图形信息
+            print(f"图形 {i} - 类型: {shape_type}, area_ratio: {area_ratio:.4f}, min_rect_area_ratio: {min_rect_area_ratio:.4f}")
+            
+            # 创建Shape对象
+            shape = {
+                "type": shape_type,
+                "contour": contour.tolist(),
+                "bbox": (x, y, w, h),
+                "center": center,
+                "area": area,
+                "confidence": confidence,
+                "position": {"x": center[0], "y": center[1]},
+                "text": ""  # 初始化文本字段
+            }
+            
+            # 在调试图像上绘制轮廓和类型
+            color = (0, 255, 0)  # 默认绿色
+            if shape_type == "diamond":
+                color = (0, 0, 255)  # 红色
+            elif shape_type == "ellipse":
+                color = (255, 0, 0)  # 蓝色
+            elif shape_type == "parallelogram":
+                color = (0, 255, 255)  # 黄色
                 
-                # 判断是否为菱形
-                # 菱形特征：四个角点，对角线垂直，四条边长度相近
-                if len(corners) == 4:
-                    # 检查对角线是否大致垂直
-                    diag1 = np.array(corners[2]) - np.array(corners[0])
-                    diag2 = np.array(corners[3]) - np.array(corners[1])
-                    dot_product = np.dot(diag1, diag2)
-                    diag_angle = abs(dot_product) / (np.linalg.norm(diag1) * np.linalg.norm(diag2)) if np.linalg.norm(diag1) * np.linalg.norm(diag2) > 0 else 1
-                    # 计算四条边的长度
-                    side_lengths = []
-                    for i in range(4):
-                        next_i = (i + 1) % 4
-                        side = np.linalg.norm(np.array(corners[next_i]) - np.array(corners[i]))
-                        side_lengths.append(side)
-                    # 计算边长的标准差比例
-                    side_mean = np.mean(side_lengths)
-                    side_std = np.std(side_lengths)
-                    side_std_ratio = side_std / side_mean if side_mean > 0 else 1
-                    # 菱形条件：对角线接近垂直且四边长度接近相等
-                    if diag_angle < 0.3 and side_std_ratio < 0.3:
-                        return "菱形", 0.9
-                
-                # 判断是否为矩形
-                # 矩形特征：四个角点，四个角接近90度，面积比接近1
-                if len(corners) == 4:
-                    # 检查角是否接近90度
-                    is_right_angled = True
-                    for angle in angles:
-                        if abs(angle - 90) > 15:  # 允许15度的误差
-                            is_right_angled = False
-                            break
-                    
-                    # 矩形条件：各角接近90度，面积比高
-                    if is_right_angled and min_rect_area_ratio > 0.97:
-                        return "矩形", 0.95
+            cv2.drawContours(debug_image, [contour], 0, color, 2)
+            cv2.putText(debug_image, f"{i}: {shape_type}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
-            # 检测是否为圆角矩形
-            is_rounded = self._is_rounded_rectangle(contour, approx, area)
-            if is_rounded and (area_ratio > 0.96 or area_ratio < 0.93):
-                return "圆角矩形", 0.9
-            
-            # 默认情况，根据面积比判断
-            if area_ratio > 0.97:
-                return "矩形", 0.7
-            elif 0.95 < area_ratio < 0.96:
-                return "平行四边形", 0.7
-            elif 0.5 < area_ratio < 0.75:
-                return "菱形", 0.7
-            else:
-                return "未知", 0.5
-        except Exception as e:
-            print(f"确定图形类型时出错: {e}")
-            return "未知", 0.0
-    
-    def _is_rounded_rectangle(self, contour, approx, area):
-        """检测是否为圆角矩形"""
-        # 圆角矩形特征：与椭圆拟合度高，与矩形拟合度也较高
-        if len(contour) < 5:
-            return False
+            shapes.append(shape)
         
-        try:
-            # 拟合椭圆
-            ellipse = cv2.fitEllipse(contour)
-            ellipse_area = np.pi * (ellipse[1][0]/2) * (ellipse[1][1]/2)
+        # 按照y坐标从上到下排序图形
+        shapes.sort(key=lambda shape: shape["position"]["y"])
+        
+        # 重新编号并更新调试图像
+        debug_image = image.copy()  # 重新创建调试图像
+        for i, shape in enumerate(shapes):
+            # 获取边界框
+            x, y, w, h = shape["bbox"]
             
-            # 计算椭圆面积与轮廓面积的比例
-            area_diff_ratio = abs(area - ellipse_area) / area if area > 0 else 1
+            # 重新绘制轮廓和编号
+            contour = np.array(shape["contour"], dtype=np.int32)
             
-            # 计算与矩形的相似度
-            x, y, w, h = cv2.boundingRect(contour)
-            rect_area = w * h
-            rect_area_ratio = area / rect_area if rect_area > 0 else 0
-            
-            # 圆角矩形的特征：
-            # 1. 与椭圆有一定差异（不是纯椭圆）
-            # 2. 与矩形有一定相似性（基本是矩形形状）
-            # 3. 点数较多（有圆角）
-            if 0.2 < area_diff_ratio < 0.5 and rect_area_ratio > 0.7 and len(contour) > 10:
-                return True
-            
-            # 另一种判断方法：判断角点附近是否有圆弧
-            if len(approx) == 4 and rect_area_ratio > 0.8:
-                # 提取四个角点
-                corners = []
-                for point in approx:
-                    corners.append((point[0][0], point[0][1]))
+            # 设置颜色
+            color = (0, 255, 0)  # 默认绿色
+            if shape["type"] == "diamond":
+                color = (0, 0, 255)  # 红色
+            elif shape["type"] == "ellipse":
+                color = (255, 0, 0)  # 蓝色
+            elif shape["type"] == "parallelogram":
+                color = (0, 255, 255)  # 黄色
                 
-                # 检查角点附近是否有多个轮廓点（圆弧特征）
-                corner_regions_complex = 0
-                for corner in corners:
-                    points_near_corner = 0
-                    for point in contour:
-                        point = point[0]
-                        dist = ((point[0] - corner[0])**2 + (point[1] - corner[1])**2)**0.5
-                        if dist < min(w, h) * 0.2:  # 角点周围20%区域
-                            points_near_corner += 1
-                    
-                    # 如果角点附近有多个点，可能是圆弧
-                    if points_near_corner > 5:
-                        corner_regions_complex += 1
-                
-                # 如果至少有3个角是圆弧，判断为圆角矩形
-                if corner_regions_complex >= 3:
-                    return True
+            cv2.drawContours(debug_image, [contour], 0, color, 2)
+            cv2.putText(debug_image, f"{i}: {shape['type']}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
-            return False
-        except Exception as e:
-            print(f"检测圆角矩形时出错: {e}")
-            return False
+            # 打印排序后的图形信息
+            print(f"排序后 图形 {i} - 类型: {shape['type']}, 位置: y={shape['position']['y']}")
+        
+        # 保存调试图像
+        debug_path = os.path.join(app.config['UPLOAD_FOLDER'], f"debug_{uuid.uuid4()}.jpg")
+        cv2.imwrite(debug_path, debug_image)
+        print(f"调试图像已保存: {debug_path}")
+        
+        # 打印识别到的图形数量
+        print(f"识别到 {len(shapes)} 个图形，已按从上到下排序")
+        
+        return image, shapes
+    
+    def _determine_shape_type(self, contour, area):
+        """确定轮廓的图形类型：矩形、平行四边形、菱形、圆角矩形"""
+        # 近似多边形
+        epsilon = 0.02 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        
+        # 获取边界框和最小外接矩形
+        x, y, w, h = cv2.boundingRect(contour)
+        rect_area = w * h
+        
+        # 计算轮廓与边界框的面积比
+        area_ratio = area / rect_area
+        
+        # 计算宽高比
+        aspect_ratio = float(w) / h if h > 0 else 0
+        
+        # 获取最小外接矩形（可能有旋转）
+        min_rect = cv2.minAreaRect(contour)
+        min_rect_width, min_rect_height = min_rect[1]
+        min_rect_area = min_rect_width * min_rect_height
+        
+        # 计算轮廓与最小外接矩形的面积比
+        min_rect_area_ratio = area / min_rect_area if min_rect_area > 0 else 0
+        
+        # 获取轮廓的角点
+        corners = self._get_corner_points(contour)
+        
+        
+        
+        # 非圆角矩形，但点数接近4的可能是四边形
+        if 4 <= len(approx) <= 6:
+            # 计算角点间的角度分布
+            angles = self._calculate_corner_angles(corners)
+            angle_std = np.std(angles) if angles else 0
+            
+            # 判断是否为菱形
+            # 菱形特征：四个角点，对角线垂直，四条边长度相近
+            if len(corners) == 4:
+                # 检查对角线是否大致垂直
+                diag1 = np.array(corners[2]) - np.array(corners[0])
+                diag2 = np.array(corners[3]) - np.array(corners[1])
+                dot_product = np.dot(diag1, diag2)
+                diag_angle = abs(dot_product) / (np.linalg.norm(diag1) * np.linalg.norm(diag2)) if np.linalg.norm(diag1) * np.linalg.norm(diag2) > 0 else 1
+                
+                # 计算四条边的长度
+                side_lengths = []
+                for i in range(4):
+                    next_i = (i + 1) % 4
+                    side = np.linalg.norm(np.array(corners[next_i]) - np.array(corners[i]))
+                    side_lengths.append(side)
+                
+                # 计算边长的标准差比例
+                side_mean = np.mean(side_lengths)
+                side_std = np.std(side_lengths)
+                side_std_ratio = side_std / side_mean if side_mean > 0 else 1
+                
+                # 菱形条件：对角线接近垂直且四边长度接近相等
+                if diag_angle < 0.3 and side_std_ratio < 0.3:
+                    return "菱形", 0.9
+            
+            # 判断是否为平行四边形
+            # 平行四边形特征：四个角点，对边平行，对边长度相近，但形状有倾斜
+            # if len(corners) == 4:
+            #     # 检查对边是否平行
+            #     opposite_sides_parallel = True
+            #     for i in range(2):
+            #         side1 = np.array(corners[(i+1)%4]) - np.array(corners[i])
+            #         side2 = np.array(corners[(i+3)%4]) - np.array(corners[(i+2)%4])
+            #         side1_norm = side1 / np.linalg.norm(side1) if np.linalg.norm(side1) > 0 else np.array([0, 0])
+            #         side2_norm = side2 / np.linalg.norm(side2) if np.linalg.norm(side2) > 0 else np.array([0, 0])
+            #         dot = abs(np.dot(side1_norm, side2_norm))
+            #         if dot < 0.9:  # 对边不够平行
+            #             opposite_sides_parallel = False
+            #             break
+                
+            #     # 检查是否有明显倾斜（区别于矩形）
+            #     is_skewed = False
+            #     for angle in angles:
+            #         if abs(angle - 90) > 10:  # 角度偏离90度超过10度
+            #             is_skewed = True
+            #             break
+                
+            #     # 计算对边长度差异
+            #     opposite_sides_similar = True
+            #     for i in range(2):
+            #         side1_len = np.linalg.norm(np.array(corners[(i+1)%4]) - np.array(corners[i]))
+            #         side2_len = np.linalg.norm(np.array(corners[(i+3)%4]) - np.array(corners[(i+2)%4]))
+            #         if abs(side1_len - side2_len) / max(side1_len, side2_len) > 0.15:  # 对边长度差异超过15%
+            #             opposite_sides_similar = False
+            #             break
+                
+            #     # 平行四边形条件：对边平行，对边长度相近，有明显倾斜
+            #     if opposite_sides_parallel and opposite_sides_similar and is_skewed:
+            #         # 附加检查：如果外接矩形面积比很高但明显有倾斜，那么是平行四边形
+            #         if min_rect_area_ratio > 0.75 and is_skewed:
+            #             return "parallelogram", 0.9
+            #         # 一般情况下的平行四边形
+            #         elif 0.7 < min_rect_area_ratio < 0.85:
+            #             return "parallelogram", 0.85
+            
+            # 判断是否为矩形
+            # 矩形特征：四个角点，四个角接近90度，面积比接近1
+            if len(corners) == 4:
+                # 检查角是否接近90度
+                is_right_angled = True
+                for angle in angles:
+                    if abs(angle - 90) > 15:  # 允许15度的误差
+                        is_right_angled = False
+                        break
+                
+                # 矩形条件：各角接近90度，面积比高
+                if is_right_angled and min_rect_area_ratio > 0.97:
+                    return "矩形", 0.95
+        
+        # 检测是否为圆角矩形
+        is_rounded_rect = self._is_rounded_rectangle(contour, approx, area)
+        if is_rounded_rect and (area_ratio > 0.96 or area_ratio < 0.93):
+            return "圆角矩形", 0.9
+        
+        # 默认情况，根据面积比判断
+        if area_ratio > 0.97:
+            return "矩形", 0.7
+        elif 0.95 < area_ratio < 0.96:
+            return "平行四边形", 0.7
+        elif 0.5 < area_ratio < 0.75:
+            return "菱形", 0.7
+        else:
+            return "未知", 0.5
     
     def _get_corner_points(self, contour):
         """获取轮廓的角点"""
@@ -805,6 +769,61 @@ class RealImageProcessor:
                 angles.append(angle)
         
         return angles
+    
+    def _is_rounded_rectangle(self, contour, approx, area):
+        """检测是否为圆角矩形"""
+        # 圆角矩形特征：与椭圆拟合度高，与矩形拟合度也较高
+        if len(contour) < 5:
+            return False
+        
+        try:
+            # 拟合椭圆
+            ellipse = cv2.fitEllipse(contour)
+            ellipse_area = np.pi * (ellipse[1][0]/2) * (ellipse[1][1]/2)
+            
+            # 计算椭圆面积与轮廓面积的比例
+            area_diff_ratio = abs(area - ellipse_area) / area if area > 0 else 1
+            
+            # 计算与矩形的相似度
+            x, y, w, h = cv2.boundingRect(contour)
+            rect_area = w * h
+            rect_area_ratio = area / rect_area if rect_area > 0 else 0
+            
+            # 圆角矩形的特征：
+            # 1. 与椭圆有一定差异（不是纯椭圆）
+            # 2. 与矩形有一定相似性（基本是矩形形状）
+            # 3. 点数较多（有圆角）
+            if 0.2 < area_diff_ratio < 0.5 and rect_area_ratio > 0.7 and len(contour) > 10:
+                return True
+            
+            # 另一种判断方法：判断角点附近是否有圆弧
+            if len(approx) == 4 and rect_area_ratio > 0.8:
+                # 提取四个角点
+                corners = []
+                for point in approx:
+                    corners.append((point[0][0], point[0][1]))
+                
+                # 检查角点附近是否有多个轮廓点（圆弧特征）
+                corner_regions_complex = 0
+                for corner in corners:
+                    points_near_corner = 0
+                    for point in contour:
+                        point = point[0]
+                        dist = ((point[0] - corner[0])**2 + (point[1] - corner[1])**2)**0.5
+                        if dist < min(w, h) * 0.2:  # 角点周围20%区域
+                            points_near_corner += 1
+                    
+                    # 如果角点附近有多个点，可能是圆弧
+                    if points_near_corner > 5:
+                        corner_regions_complex += 1
+                
+                # 如果至少有3个角是圆弧，判断为圆角矩形
+                if corner_regions_complex >= 3:
+                    return True
+            
+            return False
+        except:
+            return False
     
     def _detect_shapes_with_hough(self, binary_image, original_image):
         """使用霍夫变换检测直线和矩形"""
@@ -1338,13 +1357,12 @@ class QwenVLOCREngine:
                 if os.path.exists(temp_image_path):
                     os.remove(temp_image_path)
                 return []
-            
+                
             response_content = completion.choices[0].message.content
-
             # 将响应内容转换为单行段落
             response_content = response_content.replace('\n', ' ').strip()
             print(f"千问视觉OCR响应: {response_content}")
-
+            
             # 解析OCR结果中的文本区域
             text_regions = self._parse_ocr_result(response_content, image.shape[1], image.shape[0])
             
@@ -1759,226 +1777,221 @@ def upload_file():
         return redirect(request.url)
     
     if file and allowed_file(file.filename):
+        # 生成唯一文件名
+        filename = str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower()
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        # 处理流程图
         try:
-            # 生成唯一文件名
-            filename = str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower()
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
+            # 1. 图像预处理和分割
+            if CV_AVAILABLE:
+                image_processor = RealImageProcessor()
+            else:
+                image_processor = MockImageProcessor()
+            processed_image, shapes = image_processor.process(filepath)
             
-            # 处理流程图
-            try:
-                # 1. 图像预处理和分割
-                if CV_AVAILABLE:
-                    image_processor = RealImageProcessor()
-                else:
-                    image_processor = MockImageProcessor()
-                
-                # 捕获和处理图像处理过程中的异常
-                try:
-                    processed_image, shapes = image_processor.process(filepath)
-                except Exception as e:
-                    print(f"图像处理失败: {str(e)}")
-                    flash(f'图像处理失败: {str(e)}')
-                    return redirect(url_for('index'))
-                
-                # 2. OCR文本识别 - 强制使用千问视觉OCR
-                try:
-                    if CV_AVAILABLE:
-                        # 使用千问视觉OCR
-                        ocr_engine = QwenVLOCREngine()
-                        text_regions = ocr_engine.extract_text(processed_image)
-                        if not text_regions:  # 如果千问OCR失败，使用模拟OCR
-                            print("千问视觉OCR未返回结果，使用模拟OCR")
-                            ocr_engine = MockOCREngine()
-                            text_regions = ocr_engine.extract_text(processed_image)
-                    else:
-                        # 使用模拟OCR
-                        ocr_engine = MockOCREngine()
-                        text_regions = ocr_engine.extract_text(None)
-                except Exception as e:
-                    print(f"OCR文本识别失败: {str(e)}")
-                    # 如果OCR失败，使用模拟数据继续
+            # 2. OCR文本识别 - 强制使用千问视觉OCR
+            if CV_AVAILABLE:
+                # 使用千问视觉OCR
+                ocr_engine = QwenVLOCREngine()
+                text_regions = ocr_engine.extract_text(processed_image)
+                if not text_regions:  # 如果千问OCR失败，使用模拟OCR
+                    print("千问视觉OCR未返回结果，使用模拟OCR")
                     ocr_engine = MockOCREngine()
-                    text_regions = ocr_engine.extract_text(None)
-                
-                # 3. 图形-文本关联
+                    text_regions = ocr_engine.extract_text(processed_image)
+            else:
+                # 使用模拟OCR
+                ocr_engine = MockOCREngine()
+                text_regions = ocr_engine.extract_text(None)
+            
+            # 3. 图形-文本关联
+            if CV_AVAILABLE:
+                flowchart_analyzer = RealFlowchartAnalyzer()
+            else:
+                flowchart_analyzer = MockFlowchartAnalyzer()
+            structured_data = flowchart_analyzer.analyze(shapes, text_regions)
+            
+            # 4. 可视化识别结果
+            if CV_AVAILABLE:
+                vis_filename = visualize_results(processed_image, shapes, text_regions, structured_data["nodes"])
+            else:
+                vis_filename = None
+            
+            # 5. AI评估
+            if OPENAI_AVAILABLE:
                 try:
-                    if CV_AVAILABLE:
-                        flowchart_analyzer = RealFlowchartAnalyzer()
-                    else:
-                        flowchart_analyzer = MockFlowchartAnalyzer()
-                    structured_data = flowchart_analyzer.analyze(shapes, text_regions)
-                except Exception as e:
-                    print(f"图形-文本关联失败: {str(e)}")
-                    # 如果关联失败，使用模拟数据继续
-                    flowchart_analyzer = MockFlowchartAnalyzer()
-                    structured_data = flowchart_analyzer.analyze(shapes, text_regions)
-                
-                # 4. 可视化识别结果
-                try:
-                    if CV_AVAILABLE:
-                        vis_filename = visualize_results(processed_image, shapes, text_regions, structured_data["nodes"])
-                    else:
-                        vis_filename = None
-                except Exception as e:
-                    print(f"可视化结果失败: {str(e)}")
-                    vis_filename = None
-                
-                # 5. AI评估
-                try:
-                    if OPENAI_AVAILABLE:
-                        try:
-                            ai_evaluator = RealAIEvaluator()
-                            evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
-                        except ValueError as e:
-                            print(f"AI评估器初始化失败: {str(e)}")
-                            ai_evaluator = MockAIEvaluator()
-                            evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
-                    else:
-                        ai_evaluator = MockAIEvaluator()
-                        evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
-                except Exception as e:
-                    print(f"AI评估失败: {str(e)}")
+                    ai_evaluator = RealAIEvaluator()
+                    evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
+                except ValueError as e:
+                    print(f"AI评估器初始化失败: {str(e)}")
                     ai_evaluator = MockAIEvaluator()
                     evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
-                
-                # 6. 检查流程图模块组合
-                try:
-                    module_check_result = check_flowchart_modules(structured_data["nodes"], structured_data["connections"])
-                    print(f"模块检查结果: {module_check_result['message']}")
-                except Exception as e:
-                    print(f"模块检查失败: {str(e)}")
-                    module_check_result = {
-                        "has_valid_modules": False,
-                        "modules_count": 0,
-                        "modules": [],
-                        "message": f"模块检查失败: {str(e)}"
-                    }
-                
-                # 7. 规则验证
-                try:
-                    print("\n============ 开始规则验证 ============")
-                    print(f"验证节点数量: {len(structured_data['nodes'])}")
-                    
-                    # 打印节点信息
-                    for i, node in enumerate(structured_data["nodes"]):
-                        print(f"节点 {i+1}:")
-                        print(f"  类型: {node.get('shape_type', 'unknown')}")
-                        print(f"  文本: {node.get('text', 'empty')}")
-                    
-                    # 优先尝试使用千问API验证
-                    api_failed = False
-                    try:
-                        validator = QwenValidator(Config.QWEN_API_KEY)
-                        print(f"使用API密钥: {Config.QWEN_API_KEY[:8]}...")
-                        
-                        validation_result = validator.validate_shape_text(structured_data["nodes"])
-                        print(f"千问API验证结果: {validation_result}")
-                        
-                        if validation_result['success']:
-                            validation = validation_result['result']
-                            print("千问API验证成功，获取到结果")
-                        else:
-                            print(f"千问API验证失败: {validation_result['error']}，标记为使用模拟验证器")
-                            api_failed = True
-                    except Exception as e:
-                        print(f"千问API验证异常: {str(e)}，标记为使用模拟验证器")
-                        api_failed = True
-                    
-                    # 如果千问API验证失败，才使用模拟验证器
-                    if api_failed:
-                        print("使用模拟验证器作为备用...")
-                        mock_validator = MockValidator()
-                        mock_result = mock_validator.validate_shape_text(structured_data["nodes"])
-                        if mock_result["success"]:
-                            validation = mock_result["result"]
-                            print("模拟验证成功")
-                        else:
-                            validation = None
-                            print(f"模拟验证失败: {mock_result['error']}")
-                except Exception as e:
-                    validation = None
-                    import traceback
-                    print(f"规则验证异常: {str(e)}")
-                    print(traceback.format_exc())
-                    
-                print("============ 规则验证结束 ============\n")
-                
-                # 返回处理结果
-                
-                # 将规则验证和模块检查结果添加到evaluation_result
-                if validation:
-                    evaluation_result['validation'] = validation
-                
-                if module_check_result:
-                    evaluation_result['module_check'] = module_check_result
-                    
-                # 添加识别详情到evaluation_result
-                evaluation_result['shapes'] = shapes
-                evaluation_result['text_regions'] = text_regions
-                evaluation_result['nodes'] = structured_data["nodes"]
-                if vis_filename:
-                    evaluation_result['vis_image_path'] = f'uploads/{vis_filename}'
-                
-                # 保存分析结果到数据库
-                try:
-                    # 生成唯一会话ID作为记录ID
-                    session_id = str(uuid.uuid4())
-                    
-                    # 准备数据
-                    score = evaluation_result.get('scores', {}).get('总分', 0)
-                    comment = evaluation_result.get('feedback', '')
-                    current_date = datetime.datetime.now().strftime('%Y-%m-%d')
-                    
-                    # 将结果JSON转换为字符串
-                    result_json = json.dumps(evaluation_result, ensure_ascii=False)
-                    
-                    # 连接数据库
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    
-                    # 插入记录
-                    cursor.execute(
-                        """
-                        INSERT INTO analysis_history (id, filename, image_path, result_json, date, score, comment)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (session_id, file.filename, f'uploads/{filename}', result_json, current_date, score, comment)
-                    )
-                    
-                    # 提交事务
-                    conn.commit()
-                    conn.close()
-                    
-                    print(f"已将分析结果保存到数据库，会话ID: {session_id}")
-                except Exception as e:
-                    print(f"保存分析结果到数据库失败: {str(e)}")
-                    # 这里我们不会因为数据库保存失败而中断用户体验
-                    # 生成唯一会话ID作为记录ID，但不保存到数据库
-                    session_id = str(uuid.uuid4())
-                
-                return render_template('result.html', 
-                                      session_id=session_id,  # 添加会话ID
-                                      image_path=f'uploads/{filename}',
-                                      vis_image_path=f'uploads/{vis_filename}' if vis_filename else None,
-                                      result=evaluation_result,
-                                      shapes=shapes,
-                                      text_regions=text_regions,
-                                      nodes=structured_data["nodes"],
-                                      validation=validation,
-                                      module_check=module_check_result)
+            else:
+                ai_evaluator = MockAIEvaluator()
+                evaluation_result = ai_evaluator.evaluate(structured_data, filepath)
             
+            # 6. 检查流程图模块组合
+            module_check_result = check_flowchart_modules(structured_data["nodes"], structured_data["connections"])
+            print(f"模块检查结果: {module_check_result['message']}")
+            
+            # 7. 规则验证
+            try:
+                print("\n============ 开始规则验证 ============")
+                print(f"验证节点数量: {len(structured_data['nodes'])}")
+                
+                # 打印节点信息
+                for i, node in enumerate(structured_data["nodes"]):
+                    print(f"节点 {i+1}:")
+                    print(f"  类型: {node.get('shape_type', 'unknown')}")
+                    print(f"  文本: {node.get('text', 'empty')}")
+                
+                # 优先尝试使用千问API验证
+                api_failed = False
+                try:
+                    validator = QwenValidator(Config.QWEN_API_KEY)
+                    print(f"使用API密钥: {Config.QWEN_API_KEY[:8]}...")
+                    
+                    validation_result = validator.validate_shape_text(structured_data["nodes"])
+                    print(f"千问API验证结果: {validation_result}")
+                    
+                    if validation_result['success']:
+                        validation = validation_result['result']
+                        print("千问API验证成功，获取到结果")
+                    else:
+                        print(f"千问API验证失败: {validation_result['error']}，标记为使用模拟验证器")
+                        api_failed = True
+                except Exception as e:
+                    print(f"千问API验证异常: {str(e)}，标记为使用模拟验证器")
+                    api_failed = True
+                
+                # 如果千问API验证失败，才使用模拟验证器
+                if api_failed:
+                    print("使用模拟验证器作为备用...")
+                    mock_validator = MockValidator()
+                    mock_result = mock_validator.validate_shape_text(structured_data["nodes"])
+                    if mock_result["success"]:
+                        validation = mock_result["result"]
+                        print("模拟验证成功")
+                    else:
+                        validation = None
+                        print(f"模拟验证失败: {mock_result['error']}")
             except Exception as e:
+                validation = None
                 import traceback
-                print(f"处理失败: {str(e)}")
+                print(f"规则验证异常: {str(e)}")
                 print(traceback.format_exc())
-                flash(f'处理失败: {str(e)}')
-                return redirect(url_for('index'))
+                
+            print("============ 规则验证结束 ============\n")
+            
+            # 返回处理结果
+            
+            # 将规则验证和模块检查结果添加到evaluation_result
+            if validation:
+                evaluation_result['validation'] = validation
+            
+            if module_check_result:
+                evaluation_result['module_check'] = module_check_result
+                
+            # 添加识别详情到evaluation_result
+            evaluation_result['shapes'] = shapes
+            evaluation_result['text_regions'] = text_regions
+            evaluation_result['nodes'] = structured_data["nodes"]
+            if vis_filename:
+                evaluation_result['vis_image_path'] = f'uploads/{vis_filename}'
+            
+            # 保存分析结果到数据库
+            try:
+                # 生成唯一会话ID作为记录ID
+                session_id = str(uuid.uuid4())
+                
+                # 准备数据
+                score = evaluation_result.get('scores', {}).get('总分', 0)
+                comment = evaluation_result.get('feedback', '')
+                current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                
+                # 连接数据库
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                
+                # 1. 插入images表
+                cursor.execute(
+                    """
+                    INSERT INTO images (id, filename, filepath, upload_date)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (session_id, file.filename, f'uploads/{filename}', current_date)
+                )
+                
+                # 2. 插入analysis_results表
+                cursor.execute(
+                    """
+                    INSERT INTO analysis_results (id, image_id, analysis_date, total_score, feedback)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (session_id, session_id, current_date, score, comment)
+                )
+                
+                # 3. 插入recognition_details表
+                shapes_json = json.dumps(shapes, ensure_ascii=False)
+                text_regions_json = json.dumps(text_regions, ensure_ascii=False)
+                nodes_json = json.dumps(structured_data.get('nodes', []), ensure_ascii=False)
+                
+                cursor.execute(
+                    """
+                    INSERT INTO recognition_details (id, analysis_id, shapes, text_regions, nodes)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (session_id, session_id, shapes_json, text_regions_json, nodes_json)
+                )
+                
+                # 4. 插入score_details表
+                scores = evaluation_result.get('scores', {})
+                for category, score in scores.items():
+                    if category != '总分':  # 总分已在analysis_results表中
+                        cursor.execute(
+                            """
+                            INSERT INTO score_details (analysis_id, category, score, details)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (session_id, category, score, "自动评分")
+                        )
+                
+                # 5. 插入module_checks表
+                has_valid_modules = module_check_result.get('has_valid_modules', False) if module_check_result else False
+                module_positions = json.dumps(module_check_result.get('modules', []), ensure_ascii=False) if module_check_result else '[]'
+                
+                cursor.execute(
+                    """
+                    INSERT INTO module_checks (analysis_id, has_valid_modules, module_positions)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (session_id, has_valid_modules, module_positions)
+                )
+                
+                # 提交事务
+                conn.commit()
+                conn.close()
+                
+                print(f"已将分析结果保存到数据库，会话ID: {session_id}")
+                
+            except Exception as e:
+                print(f"保存分析结果到数据库失败: {str(e)}")
+                # 这里我们不会因为数据库保存失败而中断用户体验
+            
+            return render_template('result.html', 
+                                  session_id=session_id,  # 添加会话ID
+                                  image_path=f'uploads/{filename}',
+                                  vis_image_path=f'uploads/{vis_filename}' if vis_filename else None,
+                                  result=evaluation_result,
+                                  shapes=shapes,
+                                  text_regions=text_regions,
+                                  nodes=structured_data["nodes"],
+                                  validation=validation,
+                                  module_check=module_check_result)
+        
         except Exception as e:
-            import traceback
-            print(f"文件保存失败: {str(e)}")
-            print(traceback.format_exc())
-            flash(f'文件保存失败: {str(e)}')
+            flash(f'处理失败: {str(e)}')
             return redirect(url_for('index'))
     
     flash('不支持的文件类型')
@@ -2102,27 +2115,70 @@ def api_analyze():
                 comment = evaluation_result.get('feedback', '')
                 current_date = datetime.datetime.now().strftime('%Y-%m-%d')
                 
-                # 将结果JSON转换为字符串
-                result_json = json.dumps(evaluation_result, ensure_ascii=False)
-                
                 # 连接数据库
                 conn = get_db_connection()
                 cursor = conn.cursor()
                 
-                # 插入记录
+                # 1. 插入images表
                 cursor.execute(
                     """
-                    INSERT INTO analysis_history (id, filename, image_path, result_json, date, score, comment)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO images (id, filename, filepath, upload_date)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (session_id, file.filename, f'uploads/{filename}', result_json, current_date, score, comment)
+                    (session_id, file.filename, f'uploads/{filename}', current_date)
+                )
+                
+                # 2. 插入analysis_results表
+                cursor.execute(
+                    """
+                    INSERT INTO analysis_results (id, image_id, analysis_date, total_score, feedback)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (session_id, session_id, current_date, score, comment)
+                )
+                
+                # 3. 插入recognition_details表
+                shapes_json = json.dumps(shapes, ensure_ascii=False)
+                text_regions_json = json.dumps(text_regions, ensure_ascii=False)
+                nodes_json = json.dumps(structured_data.get('nodes', []), ensure_ascii=False)
+                
+                cursor.execute(
+                    """
+                    INSERT INTO recognition_details (id, analysis_id, shapes, text_regions, nodes)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (session_id, session_id, shapes_json, text_regions_json, nodes_json)
+                )
+                
+                # 4. 插入score_details表
+                scores = evaluation_result.get('scores', {})
+                for category, score in scores.items():
+                    if category != '总分':  # 总分已在analysis_results表中
+                        cursor.execute(
+                            """
+                            INSERT INTO score_details (analysis_id, category, score, details)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (session_id, category, score, "自动评分")
+                        )
+                
+                # 5. 插入module_checks表
+                has_valid_modules = module_check_result.get('has_valid_modules', False) if module_check_result else False
+                module_positions = json.dumps(module_check_result.get('modules', []), ensure_ascii=False) if module_check_result else '[]'
+                
+                cursor.execute(
+                    """
+                    INSERT INTO module_checks (analysis_id, has_valid_modules, module_positions)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (session_id, has_valid_modules, module_positions)
                 )
                 
                 # 提交事务
                 conn.commit()
                 conn.close()
                 
-                print(f"API已将分析结果保存到数据库，会话ID: {session_id}")
+                print(f"已将分析结果保存到数据库，会话ID: {session_id}")
                 # 添加会话ID到响应中
                 evaluation_result['session_id'] = session_id
             except Exception as e:
@@ -2270,87 +2326,81 @@ def check_flowchart_modules(nodes, connections):
         "message": ""
     }
     
-    try:
-        # 安全检查
-        if not nodes or not isinstance(nodes, list):
-            result["message"] = "流程图节点数据无效"
-            return result
+    # 安全检查
+    if not nodes or not isinstance(nodes, list):
+        result["message"] = "流程图节点数据无效"
+        return result
+    
+    # 检查节点数量是否足够
+    if len(nodes) < 3:
+        result["message"] = "流程图节点数量不足，无法形成有效模块"
+        return result
+    
+    # 定义图形类型映射（支持多种可能的表示）
+    shape_mapping = {
+        # 矩形的可能表示
+        "矩形": "rectangle",
+        "rectangle": "rectangle",
+        "rect": "rectangle",
+        "activity": "rectangle",
+        # 平行四边形的可能表示
+        "平行四边形": "parallelogram",
+        "parallelogram": "parallelogram",
+        "input_output": "parallelogram",
+        "io": "parallelogram",
+        # 圆角矩形的可能表示                
+        "rounded_rectangle": "rounded_rectangle",
+        "rounded": "rounded_rectangle",
+        "rounded_rect": "rounded_rectangle",
+        "process": "rounded_rectangle"
+    }
+    
+    # 获取节点的图形类型序列
+    shape_sequence = []
+    for i, node in enumerate(nodes):
+        # 首先尝试从shape_type获取类型
+        shape_type = node.get("shape_type", "")
+        if not shape_type and "type" in node:
+            # 如果没有shape_type但有type，使用type
+            shape_type = node.get("type", "")
         
-        # 检查节点数量是否足够
-        if len(nodes) < 3:
-            result["message"] = "流程图节点数量不足，无法形成有效模块"
-            return result
+        # 如果还是没有类型信息，尝试从节点类型或其他字段推断
+        if not shape_type:
+            # 可以基于节点的其他特征进行推断，如position, text等
+            shape_type = "unknown"
         
-        # 定义图形类型映射（支持多种可能的表示）
-        shape_mapping = {
-            # 矩形的可能表示
-            "矩形": "rectangle",
-            "rectangle": "rectangle",
-            "rect": "rectangle",
-            "activity": "rectangle",
-            # 平行四边形的可能表示
-            "平行四边形": "parallelogram",
-            "parallelogram": "parallelogram",
-            "input_output": "parallelogram",
-            "io": "parallelogram",
-            # 圆角矩形的可能表示                
-            "rounded_rectangle": "rounded_rectangle",
-            "rounded": "rounded_rectangle",
-            "rounded_rect": "rounded_rectangle",
-            "process": "rounded_rectangle",
-            "圆角矩形": "rounded_rectangle"
-        }
+        # 转为小写并标准化类型
+        shape_type = shape_type.lower()
+        normalized_type = shape_mapping.get(shape_type, "unknown")
         
-        # 获取节点的图形类型序列
-        shape_sequence = []
-        for i, node in enumerate(nodes):
-            # 首先尝试从shape_type获取类型
-            shape_type = node.get("shape_type", "")
-            if not shape_type and "type" in node:
-                # 如果没有shape_type但有type，使用type
-                shape_type = node.get("type", "")
+        # 存储标准化后的类型
+        shape_sequence.append(normalized_type)
+        print(f"节点 {i}: 原始类型={shape_type}, 标准化类型={normalized_type}")
+    
+    print(f"标准化图形序列: {shape_sequence}")
+    
+    # 查找"矩形-平行四边形-圆角矩形"的模式
+    valid_modules = []
+    
+    for i in range(len(shape_sequence) - 2):
+        # 检查连续三个节点是否符合模式
+        if (shape_sequence[i] == "rectangle" and 
+            shape_sequence[i+1] == "parallelogram" and 
+            shape_sequence[i+2] == "rounded_rectangle"):
             
-            # 如果还是没有类型信息，尝试从节点类型或其他字段推断
-            if not shape_type:
-                # 可以基于节点的其他特征进行推断，如position, text等
-                shape_type = "unknown"
-            
-            # 转为小写并标准化类型
-            shape_type = str(shape_type).lower()
-            normalized_type = shape_mapping.get(shape_type, "unknown")
-            
-            # 存储标准化后的类型
-            shape_sequence.append(normalized_type)
-            print(f"节点 {i}: 原始类型={shape_type}, 标准化类型={normalized_type}")
-        
-        print(f"标准化图形序列: {shape_sequence}")
-        
-        # 查找"矩形-平行四边形-圆角矩形"的模式
-        valid_modules = []
-        
-        for i in range(len(shape_sequence) - 2):
-            # 检查连续三个节点是否符合模式
-            if (shape_sequence[i] == "rectangle" and 
-                shape_sequence[i+1] == "parallelogram" and 
-                shape_sequence[i+2] == "rounded_rectangle"):
-                
-                # 找到一个有效模块
-                valid_modules.append([i, i+1, i+2])
-                print(f"找到有效模块: 位置 {i}, {i+1}, {i+2}")
-        
-        # 设置结果
-        result["has_valid_modules"] = len(valid_modules) > 0
-        result["modules_count"] = len(valid_modules)
-        result["modules"] = valid_modules
-        
-        if result["has_valid_modules"]:
-            result["message"] = f"流程图符合规范，共找到 {len(valid_modules)} 个'矩形-平行四边形-圆角矩形'模块"
-        else:
-            result["message"] = "流程图不符合规范，未找到'矩形-平行四边形-圆角矩形'模块"
-        
-    except Exception as e:
-        print(f"检查流程图模块时出错: {str(e)}")
-        result["message"] = f"检查流程图模块时出错: {str(e)}"
+            # 找到一个有效模块
+            valid_modules.append([i, i+1, i+2])
+            print(f"找到有效模块: 位置 {i}, {i+1}, {i+2}")
+    
+    # 设置结果
+    result["has_valid_modules"] = len(valid_modules) > 0
+    result["modules_count"] = len(valid_modules)
+    result["modules"] = valid_modules
+    
+    if result["has_valid_modules"]:
+        result["message"] = f"流程图符合规范，共找到 {len(valid_modules)} 个'矩形-平行四边形-圆角矩形'模块"
+    else:
+        result["message"] = "流程图不符合规范，未找到'矩形-平行四边形-圆角矩形'模块"
     
     return result
 
@@ -2381,26 +2431,87 @@ def view_result(session_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 查询数据库
-        cursor.execute("SELECT * FROM analysis_history WHERE id = %s", (session_id,))
+        # 1. 查询基本分析结果
+        cursor.execute("""
+            SELECT ar.*, i.filepath AS image_path 
+            FROM analysis_results ar
+            JOIN images i ON ar.image_id = i.id
+            WHERE ar.id = %s
+        """, (session_id,))
         record = cursor.fetchone()
         
         if not record:
             flash('找不到指定的分析记录', 'error')
             return redirect(url_for('history'))
         
+        # 2. 查询识别详情
+        cursor.execute("""
+            SELECT * FROM recognition_details
+            WHERE analysis_id = %s
+        """, (session_id,))
+        recognition_detail = cursor.fetchone()
+        
+        # 3. 查询评分细则
+        cursor.execute("""
+            SELECT category, score, details 
+            FROM score_details
+            WHERE analysis_id = %s
+        """, (session_id,))
+        score_details = cursor.fetchall()
+        
+        # 4. 查询模块检查结果
+        cursor.execute("""
+            SELECT * FROM module_checks
+            WHERE analysis_id = %s
+        """, (session_id,))
+        module_check_record = cursor.fetchone()
+        
+        # 构建完整的结果数据结构
+        result = {
+            'scores': {detail['category']: detail['score'] for detail in score_details},
+            'feedback': record['feedback']
+        }
+        
+        # 添加总分
+        result['scores']['总分'] = record['total_score']
+        
         # 解析JSON数据
-        try:
-            result = json.loads(record['result_json'])
-        except json.JSONDecodeError:
-            flash('分析结果数据格式错误', 'error')
-            return redirect(url_for('history'))
+        if recognition_detail:
+            try:
+                result['shapes'] = json.loads(recognition_detail['shapes'])
+                result['text_regions'] = json.loads(recognition_detail['text_regions'])
+                result['nodes'] = json.loads(recognition_detail['nodes'])
+            except json.JSONDecodeError:
+                flash('识别详情数据格式错误', 'error')
+                # 设置默认值
+                result['shapes'] = []
+                result['text_regions'] = []
+                result['nodes'] = []
+        else:
+            # 设置默认值
+            result['shapes'] = []
+            result['text_regions'] = []
+            result['nodes'] = []
         
-        # 确保所有关键数据存在，即使为空也提供默认值
-        if not isinstance(result, dict):
-            result = {}
+        # 解析模块检查结果
+        if module_check_record:
+            try:
+                module_check = {
+                    'has_valid_modules': module_check_record['has_valid_modules'],
+                    'modules': json.loads(module_check_record['module_positions'])
+                }
+            except json.JSONDecodeError:
+                module_check = {
+                    'has_valid_modules': False,
+                    'modules': []
+                }
+        else:
+            module_check = {
+                'has_valid_modules': False,
+                'modules': []
+            }
         
-        # 获取或创建必要的字段
+        # 确保数据结构完整
         shapes = result.get('shapes', [])
         if not isinstance(shapes, list):
             shapes = []
@@ -2412,23 +2523,7 @@ def view_result(session_id):
         nodes = result.get('nodes', [])
         if not isinstance(nodes, list):
             nodes = []
-            
-        # 获取或创建module_check字段
-        module_check = result.get('module_check', {})
-        if not isinstance(module_check, dict):
-            module_check = {}
         
-        if 'modules' not in module_check:
-            module_check['modules'] = []
-        
-        if 'has_valid_modules' not in module_check:
-            module_check['has_valid_modules'] = False
-        
-        # 获取或创建validation字段
-        validation = result.get('validation', {})
-        if not isinstance(validation, dict):
-            validation = {}
-            
         # 如果还是没有识别数据，则尝试通过其他信息构建基本数据
         if len(shapes) == 0 and len(nodes) > 0:
             # 从节点信息尝试构建基本的形状数据
@@ -2465,9 +2560,10 @@ def view_result(session_id):
             image_path=record['image_path'],
             vis_image_path=result.get('vis_image_path'),
             result=result,
-            validation=validation,
+            validation=result.get('validation', {}),
             module_check=module_check
         )
+        
     except Exception as e:
         import traceback
         print(f"查看结果时发生错误: {str(e)}")
@@ -2478,8 +2574,8 @@ def view_result(session_id):
         if conn:
             conn.close()
 
-# 下载报告路由
-@app.route('/download-report/<session_id>')
+# 下载报告路由 - 修复路由URL和函数名不一致的问题
+@app.route('/download_report/<session_id>')
 def download_report(session_id):
     conn = None
     try:
@@ -2487,36 +2583,91 @@ def download_report(session_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 查询数据库
-        cursor.execute("SELECT * FROM analysis_history WHERE id = %s", (session_id,))
+        # 联合查询获取所有必要的信息
+        cursor.execute("""
+            SELECT 
+                ar.id, ar.analysis_date, ar.total_score, ar.feedback,
+                i.filename, i.filepath AS image_path,
+                rd.shapes, rd.text_regions, rd.nodes,
+                mc.has_valid_modules, mc.module_positions
+            FROM analysis_results ar
+            JOIN images i ON ar.image_id = i.id
+            LEFT JOIN recognition_details rd ON ar.id = rd.analysis_id
+            LEFT JOIN module_checks mc ON ar.id = mc.analysis_id
+            WHERE ar.id = %s
+        """, (session_id,))
         record = cursor.fetchone()
         
         if not record:
             flash('找不到指定的分析记录', 'error')
             return redirect(url_for('history'))
         
-        # 解析JSON数据
+        # 查询评分明细
+        cursor.execute("""
+            SELECT category, score, details 
+            FROM score_details
+            WHERE analysis_id = %s
+        """, (session_id,))
+        score_details = cursor.fetchall()
+        
+        # 构建报告数据
+        result = {}
+        
+        # 基本信息
+        result['id'] = record['id']
+        result['filename'] = record['filename']
+        result['date'] = record['analysis_date']
+        result['feedback'] = record['feedback']
+        
+        # 评分信息
+        result['scores'] = {detail['category']: detail['score'] for detail in score_details}
+        result['scores']['总分'] = record['total_score']
+        
+        # 识别结果
         try:
-            result = json.loads(record['result_json'])
-        except json.JSONDecodeError:
-            flash('分析结果数据格式错误', 'error')
-            return redirect(url_for('history'))
+            shapes = json.loads(record['shapes']) if record['shapes'] else []
+            text_regions = json.loads(record['text_regions']) if record['text_regions'] else []
+            nodes = json.loads(record['nodes']) if record['nodes'] else []
+            module_positions = json.loads(record['module_positions']) if record['module_positions'] else []
+        except (json.JSONDecodeError, TypeError):
+            shapes = []
+            text_regions = []
+            nodes = []
+            module_positions = []
         
-        # 确保所有关键数据存在，即使为空也提供默认值
-        if not isinstance(result, dict):
-            result = {}
+        # 模块检查
+        module_check = {
+            'has_valid_modules': record['has_valid_modules'] or False,
+            'modules': module_positions
+        }
         
-        # 确保result.nodes存在，用于报告模板
-        if 'nodes' not in result:
-            result['nodes'] = []
+        # 提供默认值
+        if not isinstance(shapes, list):
+            shapes = []
+        if not isinstance(text_regions, list):
+            text_regions = []
+        if not isinstance(nodes, list):
+            nodes = []
         
-        # 生成HTML报告
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        html = render_template('report.html', record=record, result=result, now=now)
+        # 生成报告HTML
+        report_html = render_template(
+            'report.html',
+            session_id=session_id,
+            image_path=record['image_path'],
+            filename=record['filename'],
+            date=result['date'],
+            scores=result['scores'],
+            feedback=result['feedback'],
+            shapes=shapes,
+            text_regions=text_regions,
+            nodes=nodes,
+            module_check=module_check,
+            is_download=True   # 标记为下载模式，报告模板可以据此显示不同的内容
+        )
         
-        # 设置响应头以提示下载
+        # 返回HTML
         response = app.response_class(
-            response=html,
+            response=report_html,
             status=200,
             mimetype='text/html'
         )
@@ -2548,7 +2699,7 @@ def about():
 def history():
     # 获取分页参数
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
+    per_page = 6  # 每页显示6条记录
     
     # 获取筛选参数
     start_date = request.args.get('start_date', '')
@@ -2570,35 +2721,53 @@ def history():
     if sort_order not in allowed_sort_orders:
         sort_order = 'desc'
     
+    # 创建字段映射表，前端参数到SQL字段
+    field_mapping = {
+        'id': 'ar.id',
+        'filename': 'i.filename',
+        'date': 'ar.analysis_date',
+        'score': 'ar.total_score'
+    }
+    
+    # 如果提供的排序字段在映射表中，使用映射的SQL字段
+    sql_sort_by = field_mapping.get(sort_by, 'ar.analysis_date')
+    
     try:
         # 计算分页偏移量
         offset = (page - 1) * per_page
         
-        # 构建SQL查询
-        sql_query = "SELECT * FROM analysis_history WHERE 1=1"
+        # 构建SQL查询 - 使用JOIN连接多个表获取完整信息
+        sql_query = """
+            SELECT ar.id, i.filename, i.filepath AS image_path, 
+                   ar.analysis_date AS date, ar.total_score AS score, 
+                   ar.feedback AS comment
+            FROM analysis_results ar
+            JOIN images i ON ar.image_id = i.id
+            WHERE 1=1
+        """
         params = []
         
         # 添加日期筛选
         if start_date:
-            sql_query += " AND date >= %s"
+            sql_query += " AND ar.analysis_date >= %s"
             params.append(start_date)
         if end_date:
-            sql_query += " AND date <= %s"
+            sql_query += " AND ar.analysis_date <= %s"
             params.append(end_date)
         
         # 添加分数筛选
-        sql_query += " AND score >= %s AND score <= %s"
+        sql_query += " AND ar.total_score >= %s AND ar.total_score <= %s"
         params.extend([min_score, max_score])
         
         # 添加排序 - 使用验证过的字段和顺序
-        sql_query += f" ORDER BY {sort_by} {sort_order}"
+        sql_query += f" ORDER BY {sql_sort_by} {sort_order}"
         
         # 连接数据库并执行查询
         conn = get_db_connection()
         cursor = conn.cursor()
         
         # 获取总记录数
-        count_sql = sql_query.replace("SELECT *", "SELECT COUNT(*) as total_count")
+        count_sql = sql_query.replace("SELECT ar.id, i.filename, i.filepath AS image_path, ar.analysis_date AS date, ar.total_score AS score, ar.feedback AS comment", "SELECT COUNT(*) as total_count")
         cursor.execute(count_sql, params)
         total_records = cursor.fetchone()['total_count']
         
@@ -2613,11 +2782,11 @@ def history():
         # 计算总页数
         total_pages = (total_records + per_page - 1) // per_page
         
-        # 创建分页对象
+        # 构建分页信息
         pagination = {
             'page': page,
             'per_page': per_page,
-            'total': total_records,
+            'total_records': total_records,
             'total_pages': total_pages,
             'has_prev': page > 1,
             'has_next': page < total_pages,
@@ -2625,6 +2794,9 @@ def history():
             'next_num': page + 1 if page < total_pages else None,
             'pages': range(max(1, page - 2), min(total_pages + 1, page + 3))
         }
+        
+        # 关闭数据库连接
+        conn.close()
         
         return render_template(
             'history.html',
@@ -2645,40 +2817,36 @@ def history():
             conn.close()
 
 # 删除记录路由
-@app.route('/delete_record', methods=['POST'])
-def delete_record():
-    record_id = request.form.get('record_id')
-    
-    if not record_id:
-        flash('记录ID不能为空', 'error')
-        return redirect(url_for('history'))
-    
+@app.route('/delete_record/<session_id>', methods=['POST'])
+def delete_record(session_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         # 先获取记录信息，用于删除关联的图片文件
-        cursor.execute("SELECT image_path FROM analysis_history WHERE id = %s", (record_id,))
+        cursor.execute("SELECT filepath FROM images WHERE id = %s", (session_id,))
         record = cursor.fetchone()
         
         if record:
             # 删除关联的图片文件
-            image_path = os.path.join(app.static_folder, record['image_path'])
+            image_path = os.path.join(app.static_folder, record['filepath'])
             if os.path.exists(image_path):
                 try:
                     os.remove(image_path)
                 except Exception as e:
                     print(f"删除图片文件失败: {str(e)}")
             
-            # 删除数据库记录
-            cursor.execute("DELETE FROM analysis_history WHERE id = %s", (record_id,))
+            # 由于外键约束，只需删除images表中的记录
+            # 其他关联表中的记录会自动级联删除
+            cursor.execute("DELETE FROM images WHERE id = %s", (record_id,))
             conn.commit()
             
             flash('记录已成功删除', 'success')
         else:
             flash('找不到指定的记录', 'error')
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         flash(f'删除记录时发生错误: {str(e)}', 'error')
     finally:
         if conn:
@@ -2694,20 +2862,21 @@ def clear_history():
         cursor = conn.cursor()
         
         # 先获取所有记录的图片路径
-        cursor.execute("SELECT image_path FROM analysis_history")
+        cursor.execute("SELECT filepath FROM images")
         records = cursor.fetchall()
         
         # 删除关联的图片文件
         for record in records:
-            image_path = os.path.join(app.static_folder, record['image_path'])
+            image_path = os.path.join(app.static_folder, record['filepath'])
             if os.path.exists(image_path):
                 try:
                     os.remove(image_path)
                 except Exception as e:
                     print(f"删除图片文件失败: {str(e)}")
         
-        # 删除所有记录
-        cursor.execute("DELETE FROM analysis_history")
+        # 删除所有表中的数据（按照外键约束顺序删除）
+        # 由于外键约束和级联删除，只需要删除主表（images）的数据
+        cursor.execute("DELETE FROM images")
         conn.commit()
         
         flash('所有历史记录已清空', 'success')
@@ -2732,27 +2901,49 @@ def test_db():
         cursor = conn.cursor()
         
         # 检查表是否存在
-        cursor.execute("SHOW TABLES LIKE 'analysis_history'")
-        if not cursor.fetchone():
-            results.append("警告: 'analysis_history'表不存在，可能需要重新初始化数据库")
-        else:
-            results.append("成功: 'analysis_history'表存在")
+        required_tables = ['images', 'analysis_results', 'recognition_details', 'score_details', 'module_checks']
+        for table in required_tables:
+            cursor.execute(f"SHOW TABLES LIKE '{table}'")
+            if not cursor.fetchone():
+                results.append(f"警告: '{table}' 表不存在，可能需要重新初始化数据库")
+            else:
+                results.append(f"成功: '{table}' 表存在")
+        
+        # 检查数据库关系
+        try:
+            # 查询分析记录总数
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM analysis_results
+            """)
+            ar_count = cursor.fetchone()['count']
+            results.append(f"分析结果记录总数: {ar_count}")
             
-            # 查询记录数
-            cursor.execute("SELECT COUNT(*) as count FROM analysis_history")
-            count = cursor.fetchone()['count']
-            results.append(f"分析历史记录总数: {count}")
+            # 查询图片总数
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM images
+            """)
+            img_count = cursor.fetchone()['count']
+            results.append(f"图像记录总数: {img_count}")
             
             # 查询最近5条记录
-            cursor.execute("SELECT id, filename, date, score FROM analysis_history ORDER BY date DESC LIMIT 5")
+            cursor.execute("""
+                SELECT ar.id, i.filename, ar.analysis_date, ar.total_score 
+                FROM analysis_results ar
+                JOIN images i ON ar.image_id = i.id
+                ORDER BY ar.analysis_date DESC LIMIT 5
+            """)
             records = cursor.fetchall()
             
             if records:
                 results.append("最近5条记录:")
                 for record in records:
-                    results.append(f"ID: {record['id']}, 文件名: {record['filename']}, 日期: {record['date']}, 分数: {record['score']}")
+                    results.append(f"ID: {record['id']}, 文件名: {record['filename']}, 日期: {record['analysis_date']}, 分数: {record['total_score']}")
             else:
                 results.append("暂无记录")
+        except Exception as e:
+            results.append(f"查询数据时出错: {str(e)}")
         
         conn.close()
         results.append("数据库连接测试完成")
