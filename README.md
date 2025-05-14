@@ -109,14 +109,14 @@ python run.py
 - `POST /api/analyze`：上传并分析流程图
 
 ## 功能展示
-# 1. 上传界面
+### 1. 上传界面
 ![Image](https://github.com/user-attachments/assets/8777bf02-22e6-4662-a406-17787e7614b9)
-# 2. 分析结果
+### 2. 分析结果
 ![Image](https://github.com/user-attachments/assets/5fb7d09c-8429-4a59-94e7-47ef19644bda)
 ![Image](https://github.com/user-attachments/assets/750124d4-f1d5-4d25-a106-1cdd58ce7631)
 ![Image](https://github.com/user-attachments/assets/08e18222-fa6d-426e-adf5-0c6705364fa2)
 ![Image](https://github.com/user-attachments/assets/0e01b6ee-eaf7-4cd9-81b4-94f9b5473bd8)
 ![Image](https://github.com/user-attachments/assets/79699d8e-9b90-4909-a66a-e5d197269a0e)
 ![Image](https://github.com/user-attachments/assets/5d2f1b13-c543-4d87-8474-bf769eb10ad6)
-# 3. 分析历史
+### 3. 分析历史
 ![Image](https://github.com/user-attachments/assets/5a1aa400-3188-4bf9-af57-1cff9ae8ad29)
