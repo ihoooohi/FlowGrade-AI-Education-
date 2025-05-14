@@ -18,13 +18,6 @@ pip install -r requirements.txt
 
 ### 2. MySQL数据库配置
 
-系统默认使用以下MySQL配置：
-- 主机: localhost
-- 用户: root
-- 密码: 123456
-- 数据库名: flowchat_db
-- 字符集: utf8mb4
-
 如需修改数据库连接信息，请编辑以下文件：
 - `setup_database.py` - 初始化数据库
 - `modified_app.py` - `get_db_connection()` 函数
@@ -35,7 +28,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-系统会自动初始化数据库并启动web服务，默认地址为 http://localhost:5000
+系统会自动初始化数据库并启动web服务
 
 ## 主要功能
 
@@ -96,7 +89,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-2. 在浏览器中访问：`http://localhost:5000`
+2. 在浏览器中访问
 3. 上传流程图图像进行分析和评估
 
 ## 模拟模式
@@ -114,7 +107,3 @@ python run.py
 系统提供了REST API接口，可用于集成到其他应用中：
 
 - `POST /api/analyze`：上传并分析流程图
-
-## 许可证
-
-MIT 
